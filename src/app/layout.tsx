@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/providers';
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="bn" suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>{children}</Providers>
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );

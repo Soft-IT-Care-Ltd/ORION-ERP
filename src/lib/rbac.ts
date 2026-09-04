@@ -19,13 +19,18 @@ export const ROLE_HOME: Record<Role, string> = {
   CUSTOMER: '/customer',
 };
 
-/** কোন route prefix কোন role রা অ্যাক্সেস করতে পারবে */
+/**
+ * কোন route prefix কোন role রা অ্যাক্সেস করতে পারবে।
+ * ADMIN operational প্যানেলগুলো দেখতে পারে (PRD সেকশন ৪ — full visibility), কিন্তু
+ * `/customer` শুধু CUSTOMER এর — ওই পোর্টাল লগইন করা ইউজারের নিজের Customer
+ * রেকর্ডের উপর নির্ভরশীল, যা অন্য role এর থাকে না।
+ */
 export const ROUTE_ROLES: Record<string, Role[]> = {
   '/admin': ['ADMIN'],
   '/sales': ['ADMIN', 'MARKETING'],
   '/engineer': ['ADMIN', 'ENGINEER'],
   '/accounts': ['ADMIN', 'ACCOUNTS'],
-  '/customer': ['ADMIN', 'CUSTOMER'],
+  '/customer': ['CUSTOMER'],
 };
 
 /** সব permission key — PRD সেকশন ৪ এর row গুলোর কোড-রূপ */

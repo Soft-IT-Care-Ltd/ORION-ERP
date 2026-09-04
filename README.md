@@ -4,7 +4,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui + Prisma + PostgreSQ
 
 স্পেসিফিকেশন: [`01_PRD.md`](01_PRD.md) · প্ল্যান: [`02_BUILD_PLAN.md`](02_BUILD_PLAN.md) · স্কিমা: [`03_schema.prisma`](03_schema.prisma) · Claude Code instructions: [`CLAUDE.md`](CLAUDE.md)
 
-**বর্তমান অবস্থা: Phase 0 (Project Setup) সম্পন্ন।**
+**বর্তমান অবস্থা: Phase 1 (Auth + RBAC + Base Layout) সম্পন্ন।**
 
 ---
 
@@ -119,6 +119,7 @@ src/
 ├── app/
 │   ├── (auth)/login/      # লগইন পেজ + ফর্ম
 │   ├── admin/             # ADMIN
+│   │   └── users/         # ইউজার ম্যানেজমেন্ট (list + server actions)
 │   ├── sales/             # MARKETING
 │   ├── engineer/          # ENGINEER
 │   ├── accounts/          # ACCOUNTS
@@ -126,7 +127,7 @@ src/
 │   └── api/auth/[...nextauth]/
 ├── components/
 │   ├── ui/                # shadcn/ui
-│   ├── layout/            # PanelShell, SignOutButton
+│   ├── layout/            # PanelShell, sidebar, mobile drawer, user menu
 │   ├── pipeline/          # Phase 2
 │   ├── phase-timeline/    # Phase 3
 │   └── payment-schedule/  # Phase 4
@@ -134,6 +135,8 @@ src/
 │   ├── auth.ts            # NextAuth config (Credentials + JWT + role)
 │   ├── prisma.ts
 │   ├── rbac.ts            # permission matrix (PRD সেকশন ৪)
+│   ├── nav.ts             # panel-wise sidebar মেনু
+│   ├── guards.ts          # server action এর permission গার্ড
 │   ├── activity-log.ts    # audit trail helper
 │   ├── notifications.ts
 │   ├── utils.ts
@@ -142,13 +145,42 @@ src/
 └── middleware.ts          # role-based route protection
 ```
 
-## ৫. Auth কীভাবে কাজ করে
+## ৫. Auth ও RBAC কীভাবে কাজ করে
 
 - **Credentials provider** (`src/lib/auth.ts`) — ইমেইল/পাসওয়ার্ড, bcrypt hash যাচাই, `active: false` ইউজার ব্লকড।
 - **JWT session** — `role` ও `id` টোকেনে থাকে, তাই middleware এ ডাটাবেস কল ছাড়াই role চেক হয়।
-- **`middleware.ts`** — `/admin`, `/sales`, `/engineer`, `/accounts`, `/customer` প্রোটেক্টেড। লগইন না থাকলে `/login`, ভুল role হলে নিজের প্যানেলে redirect।
-- **`PanelShell`** — সার্ভার সাইডেও আবার চেক (defense in depth)।
+- **`middleware.ts`** — প্যানেল route গুলো প্রোটেক্টেড। লগইন না থাকলে `/login`, ভুল role হলে নিজের প্যানেলে redirect।
+- **`PanelShell`** — প্রতিটি পেজ লোডে DB থেকে ইউজারের current role ও `active` আবার যাচাই করে।
+  তাই অ্যাডমিন কাউকে **নিষ্ক্রিয় করলে তার চালু সেশনও সাথে সাথে বন্ধ** হয় (JWT এর মেয়াদ শেষ হওয়ার অপেক্ষা করতে হয় না)।
+- **`lib/guards.ts`** — server action এ `getAuthorizedUser(permission)` দিয়ে একই যাচাই।
 - **`lib/rbac.ts`** — permission matrix; নতুন role যোগ করলে শুধু এখানে ম্যাপিং বাড়াতে হবে।
+
+### Route → role
+
+| Route | কারা ঢুকতে পারবে |
+|---|---|
+| `/admin/**` | ADMIN |
+| `/sales/**` | ADMIN, MARKETING |
+| `/engineer/**` | ADMIN, ENGINEER |
+| `/accounts/**` | ADMIN, ACCOUNTS |
+| `/customer/**` | CUSTOMER (পোর্টালটি লগইন করা ইউজারের নিজের `Customer` রেকর্ডের উপর নির্ভরশীল) |
+
+## ৫ক. ইউজার ম্যানেজমেন্ট (`/admin/users`)
+
+শুধু ADMIN। নাম/ইমেইল/ফোন দিয়ে সার্চ, role ফিল্টার, এবং:
+
+- **নতুন ইউজার** — role assign সহ; `CUSTOMER` হলে সাথে `Customer` প্রোফাইলও তৈরি হয়
+- **এডিট** — নাম, ইমেইল, ফোন, role
+- **পাসওয়ার্ড রিসেট** (কমপক্ষে ৮ অক্ষর)
+- **সক্রিয়/নিষ্ক্রিয়** টগল
+
+সেফটি রুল:
+
+- নিজের role নিজে বদলানো বা নিজেকে নিষ্ক্রিয় করা যায় না
+- সিস্টেমে অন্তত একজন সক্রিয় ADMIN থাকতেই হবে
+- প্রতিটি অ্যাকশন `ActivityLog` এ লগ হয় (`USER_CREATED`, `USER_ROLE_CHANGED`, `USER_DEACTIVATED`, …)
+
+> **নোট:** role বদলালে ইউজারের JWT তে পুরনো role থেকে যায়। `PanelShell` DB এর role অনুযায়ী তাকে সঠিক প্যানেলে পাঠায়, তবে সাইডবার/নেভিগেশন পুরোপুরি আপডেট হতে তাকে **আবার লগইন** করতে হবে।
 
 ## ৬. নতুন shadcn/ui কম্পোনেন্ট যোগ
 
@@ -160,4 +192,6 @@ npx shadcn@2.10.0 add dialog select textarea
 
 ## ৭. পরবর্তী ধাপ
 
-Phase 1 — Auth + RBAC + Base Layout (role-wise sidebar, admin user management)। প্রম্পট: `02_BUILD_PLAN.md` সেকশন ৩।
+Phase 2 — Lead Management & Sales Pipeline (Kanban board, lead CRUD, follow-up)। প্রম্পট: `04_PROMPTS.md` এর Phase 2 সেকশন।
+
+সাইডবারে **P2 / P3 / P4 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।
