@@ -1,0 +1,269 @@
+// Orion Builders CRM/ERP — Prisma Schema
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MARKETING
+  ENGINEER
+  ACCOUNTS
+  CUSTOMER
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  SITE_VISIT_SCHEDULED
+  SITE_VISIT_DONE
+  NEGOTIATION
+  BOOKING
+  SALE_AGREEMENT_SIGNED
+  WON
+  LOST
+}
+
+enum LeadSource {
+  FACEBOOK_ADS
+  WEBSITE
+  WALK_IN
+  REFERRAL
+  COLD_CALL
+  EXHIBITION
+  OTHER
+}
+
+enum UnitStatus {
+  AVAILABLE
+  BOOKED
+  SOLD
+  ON_HOLD
+}
+
+enum InstallmentStatus {
+  SCHEDULED
+  PAID
+  PARTIAL
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  BKASH
+  NAGAD
+  CHEQUE
+  OTHER
+}
+
+enum PhaseStatus {
+  UPCOMING
+  IN_PROGRESS
+  DONE
+  DELAYED
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  phone         String?
+  passwordHash  String
+  role          Role
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  assignedLeads Lead[]        @relation("AssignedLeads")
+  phaseUpdates  PhaseUpdate[]
+  payments      Payment[]     @relation("ReceivedByUser")
+  customer      Customer?
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+}
+
+model Lead {
+  id              String     @id @default(cuid())
+  name            String
+  phone           String
+  email           String?
+  source          LeadSource
+  interestedUnit  Unit?      @relation(fields: [unitId], references: [id])
+  unitId          String?
+  budgetMin       Decimal?
+  budgetMax       Decimal?
+  stage           LeadStage  @default(NEW)
+  lostReason      String?
+  assignedTo      User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedToId    String?
+  nextFollowUpAt  DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  activities      LeadActivity[]
+  sale            Sale?
+}
+
+model LeadActivity {
+  id        String   @id @default(cuid())
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  leadId    String
+  note      String
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  location    String
+  description String?
+  createdAt   DateTime @default(now())
+
+  units       Unit[]
+  phaseTemplates PhaseTemplate[]
+}
+
+model Unit {
+  id         String     @id @default(cuid())
+  project    Project    @relation(fields: [projectId], references: [id])
+  projectId  String
+  unitNo     String
+  sizeSqft   Decimal?
+  price      Decimal
+  status     UnitStatus @default(AVAILABLE)
+
+  leads      Lead[]
+  sale       Sale?
+  phases     Phase[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique
+  nid       String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  sales     Sale[]
+}
+
+model Sale {
+  id            String       @id @default(cuid())
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  leadId        String?      @unique
+  unit          Unit         @relation(fields: [unitId], references: [id])
+  unitId        String       @unique
+  customer      Customer     @relation(fields: [customerId], references: [id])
+  customerId    String
+  totalAmount   Decimal
+  saleDate      DateTime     @default(now())
+
+  paymentPlan   PaymentPlan?
+  documents     Document[]
+}
+
+model PaymentPlan {
+  id            String        @id @default(cuid())
+  sale          Sale          @relation(fields: [saleId], references: [id])
+  saleId        String        @unique
+  createdAt     DateTime      @default(now())
+
+  installments  Installment[]
+}
+
+model Installment {
+  id             String             @id @default(cuid())
+  paymentPlan    PaymentPlan        @relation(fields: [paymentPlanId], references: [id])
+  paymentPlanId  String
+  label          String             // e.g. "Booking Money", "Installment 1/20"
+  dueDate        DateTime
+  amount         Decimal
+  status         InstallmentStatus  @default(SCHEDULED)
+
+  payments       Payment[]
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  installment    Installment   @relation(fields: [installmentId], references: [id])
+  installmentId  String
+  amountReceived Decimal
+  method         PaymentMethod
+  receiptNo      String        @unique
+  receivedBy     User          @relation("ReceivedByUser", fields: [receivedById], references: [id])
+  receivedById   String
+  paidAt         DateTime      @default(now())
+}
+
+model PhaseTemplate {
+  id         String   @id @default(cuid())
+  project    Project  @relation(fields: [projectId], references: [id])
+  projectId  String
+  name       String   // e.g. "Foundation Work"
+  order      Int
+  defaultDurationDays Int?
+}
+
+model Phase {
+  id             String      @id @default(cuid())
+  unit           Unit        @relation(fields: [unitId], references: [id])
+  unitId         String
+  name           String
+  order          Int
+  status         PhaseStatus @default(UPCOMING)
+  plannedStart   DateTime?
+  plannedEnd     DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  percentComplete Int        @default(0)
+
+  updates        PhaseUpdate[]
+}
+
+model PhaseUpdate {
+  id          String   @id @default(cuid())
+  phase       Phase    @relation(fields: [phaseId], references: [id])
+  phaseId     String
+  updatedBy   User     @relation(fields: [updatedById], references: [id])
+  updatedById String
+  note        String?
+  photoUrls   String[]
+  createdAt   DateTime @default(now())
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  sale       Sale?    @relation(fields: [saleId], references: [id])
+  saleId     String?
+  type       String   // e.g. "Booking Form", "Sale Deed", "Allotment Letter", "Receipt"
+  fileUrl    String
+  uploadedAt DateTime @default(now())
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  type       String   // e.g. "PAYMENT_DUE", "PHASE_MILESTONE", "FOLLOW_UP_DUE"
+  message    String
+  readStatus Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  entityType String   // e.g. "Lead", "Payment", "Phase"
+  entityId   String
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  action     String   // e.g. "STAGE_CHANGED", "PAYMENT_RECEIVED"
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
