@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="45" viewBox="7 13 50 45" role="img" aria-label="Orion Builders">
+  <rect x="7" y="36" width="14" height="22" fill="#17130D"></rect>
+  <rect x="25" y="24" width="14" height="34" fill="#17130D"></rect>
+  <path d="M43 18 h14 v40 H43 Z M43 18 v-5 h8 v5" fill="#CEB07A"></path>
+</svg>

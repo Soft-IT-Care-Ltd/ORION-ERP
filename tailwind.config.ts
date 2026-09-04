@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import defaultTheme from 'tailwindcss/defaultTheme';
 
 const config = {
   darkMode: ['class'],
@@ -19,6 +20,12 @@ const config = {
     },
     extend: {
       colors: {
+        // Orion Builders ব্র্যান্ড টোকেন — 05_BRAND_GUIDE.md
+        'orion-navy': '#0B1F3A',
+        'orion-gold': '#C9A227',
+        'orion-slate': '#5A6573',
+        'orion-sky': '#E8EDF4',
+
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -52,6 +59,12 @@ const config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+      },
+      fontFamily: {
+        // Latin আগে, বাংলা fallback পরে — মিশ্র টেক্সট ঠিকভাবে রেন্ডার হবে
+        sans: ['var(--font-body)', 'var(--font-bengali)', ...defaultTheme.fontFamily.sans],
+        heading: ['var(--font-heading)', 'var(--font-bengali)', ...defaultTheme.fontFamily.sans],
+        bengali: ['var(--font-bengali)', ...defaultTheme.fontFamily.sans],
       },
       borderRadius: {
         lg: 'var(--radius)',

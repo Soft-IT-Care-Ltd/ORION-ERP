@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
-import { Building2 } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { canAccessRoute, homeForRole, ROLE_LABEL } from '@/lib/rbac';
 import { getPanel } from '@/lib/nav';
 import { Badge } from '@/components/ui/badge';
+import { OrionLockup } from '@/components/brand/orion-logo';
 import { NavLinks } from './nav-links';
 import { MobileNav } from './mobile-nav';
 import { UserMenu } from './user-menu';
@@ -48,11 +48,9 @@ export async function PanelShell({
     <div className="flex min-h-screen bg-muted/30">
       {/* ডেস্কটপ sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-background md:flex">
-        <div className="flex items-center gap-2 border-b px-4 py-4">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Building2 className="h-4 w-4" />
-          </span>
-          <span className="truncate text-sm font-semibold">Orion Builders</span>
+        {/* ব্র্যান্ড লোগো — ক্লিক করলে এই প্যানেলের ড্যাশবোর্ড হোমে */}
+        <div className="flex items-center border-b px-4 py-4">
+          <OrionLockup href={basePath} size={26} />
         </div>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
           <NavLinks basePath={basePath} />
@@ -64,6 +62,7 @@ export async function PanelShell({
         <header className="sticky top-0 z-10 border-b bg-background">
           <div className="flex items-center gap-2 px-3 py-2 md:px-6 md:py-3">
             <MobileNav basePath={basePath} title={panel.title} showSwitcher={isAdmin} />
+            <OrionLockup href={basePath} size={24} showWordmark={false} className="md:hidden" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold md:text-base">{panel.title}</p>
             </div>

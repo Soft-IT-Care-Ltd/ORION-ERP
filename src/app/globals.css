@@ -4,48 +4,60 @@
 
 @layer base {
   :root {
+    /*
+     * Orion Builders ব্র্যান্ড প্যালেট — source of truth: 05_BRAND_GUIDE.md
+     * Tailwind এর alpha modifier (যেমন bg-primary/90) কাজ করার জন্য মানগুলো
+     * space-separated HSL triplet হিসেবে রাখা (hsl() wrapper ছাড়া)।
+     */
+    --orion-navy: 214.4 68.1% 13.5%; /* #0B1F3A — Deep Navy */
+    --orion-gold: 45.6 67.5% 47.1%; /* #C9A227 — Star Gold */
+    --orion-slate: 213.6 12.2% 40.2%; /* #5A6573 — Slate Gray */
+    --orion-sky: 215 35.3% 93.3%; /* #E8EDF4 — Light Sky */
+
+    /* shadcn semantic token → ব্র্যান্ড ম্যাপিং (এতে পুরো UI একসাথে ব্র্যান্ডেড হয়) */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: var(--orion-navy);
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: var(--orion-navy);
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --popover-foreground: var(--orion-navy);
+    --primary: var(--orion-navy);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--orion-sky);
+    --secondary-foreground: var(--orion-navy);
+    --muted: var(--orion-sky);
+    --muted-foreground: var(--orion-slate);
+    --accent: var(--orion-sky);
+    --accent-foreground: var(--orion-navy);
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 28% 88%;
+    --input: 214 28% 88%;
+    --ring: var(--orion-navy);
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* dark surface variant — লোগোর reversed ভার্সনের সাথে মিলিয়ে navy ব্যাকগ্রাউন্ড */
+    --background: 214 45% 9%;
+    --foreground: var(--orion-sky);
+    --card: 214 42% 12%;
+    --card-foreground: var(--orion-sky);
+    --popover: 214 42% 12%;
+    --popover-foreground: var(--orion-sky);
+    --primary: var(--orion-gold);
+    --primary-foreground: var(--orion-navy);
+    --secondary: 214 30% 18%;
+    --secondary-foreground: var(--orion-sky);
+    --muted: 214 30% 18%;
+    --muted-foreground: 215 18% 68%;
+    --accent: 214 30% 20%;
+    --accent-foreground: var(--orion-sky);
+    --destructive: 0 62% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 26% 22%;
+    --input: 214 26% 22%;
+    --ring: var(--orion-gold);
   }
 }
 
@@ -56,5 +68,25 @@
   body {
     @apply bg-background text-foreground;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /*
+   * ফন্ট স্ট্যাক (next/font ভেরিয়েবল — root layout এ সেট করা):
+   * Latin গ্লিফ Open Sans / Montserrat থেকে আসে, আর বাংলা কোডপয়েন্টগুলো
+   * fallback হিসেবে Noto Sans Bengali এ যায় — তাই একই লাইনে বাংলা+English
+   * মিশ্র টেক্সট (আমাদের UI-তে যা স্বাভাবিক) ঠিকভাবে রেন্ডার হয়।
+   */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family:
+      var(--font-heading),
+      var(--font-bengali),
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
   }
 }

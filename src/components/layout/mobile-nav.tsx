@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { OrionLockup } from '@/components/brand/orion-logo';
 import { NavLinks } from './nav-links';
 import { PanelSwitcher } from './panel-switcher';
 
@@ -27,7 +28,8 @@ export function MobileNav({
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-72 p-0">
-        <SheetHeader className="border-b px-4 py-4 text-left">
+        <SheetHeader className="space-y-2 border-b px-4 py-4 text-left">
+          <OrionLockup href={basePath} size={24} onNavigate={() => setOpen(false)} />
           <SheetTitle className="text-base">{title}</SheetTitle>
         </SheetHeader>
         <div className="flex flex-col gap-3 p-3">
