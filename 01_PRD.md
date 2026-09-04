@@ -78,15 +78,34 @@ Orion Builders মূলত real estate development / construction business — 
 | Field | Type | উদাহরণ |
 |---|---|---|
 | Name | text | মোঃ রফিকুল ইসলাম |
-| Phone | text | 01711-XXXXXX |
+| Phone (country code সহ) | text | +971-50-XXXXXXX |
+| Residence Country | enum/text | UAE |
 | Email | text | rafiqul@example.com |
 | Source | enum | Facebook Ads |
 | Interested Project/Unit | FK | "Orion Green, Khulna — Flat B-4" |
+| Project/Land Location | text | "সোনাডাঙ্গা, খুলনা — নিজস্ব জমি" |
 | Budget Range | number | ৳45–55 লাখ |
 | Assigned To | FK (user) | Marketing Executive — Sohel |
 | Stage | enum | নিচে দেখুন |
 | Next Follow-up Date | date | 10 Sep 2026 |
 | Notes/Activity log | text[] | timestamped notes |
+| Local Contact Name | text | মোঃ করিম (ভাই) |
+| Local Contact Phone | text | 01711-XXXXXX |
+| Local Contact Relation | text | ভাই / বন্ধু / আত্মীয় |
+
+> **প্রবাসী-কেন্দ্রিক নোট:** যেহেতু Orion Builders এর বড় অংশ প্রবাসী ক্লায়েন্ট (তারা বিদেশ থেকে দেশের নম্বরে না, নিজেদের দেশের নম্বর দেয়, এবং যোগাযোগের সুবিধার জন্য বাংলাদেশে থাকা পরিচিত কারো নম্বর/নাম দিয়ে যায়) — তাই ফোন নম্বর ফিল্ড অবশ্যই international format (country code সহ) সাপোর্ট করবে, এবং লিডের সাথে একটা **Local Contact** (বাংলাদেশে থাকা পরিচিত ব্যক্তি) রেকর্ড রাখা হবে যাকে দিয়ে যোগাযোগ করা যায়। "Project/Land Location" ফিল্ডে ক্লায়েন্টের জমি/প্রজেক্টের প্রকৃত অবস্থান (জেলা/উপজেলা/এলাকা) রাখা হবে।
+
+**Lead Documents (ফাইল আপলোড):**
+
+প্রতিটি লিডের সাথে একাধিক ফাইল সংযুক্ত করা যাবে — যেমন Floor Plan, 3D Design/Render, Proposal (ক্লায়েন্টকে পাঠানো প্রস্তাবনা), জমির দলিল/ছবি, বা অন্য যেকোনো নথি। প্রতিটি ফাইলের সাথে একটা টাইপ/লেবেল থাকবে যাতে বোঝা যায় এটা কী ধরনের ফাইল।
+
+| Field | Type | উদাহরণ |
+|---|---|---|
+| File | upload | floor-plan-v1.pdf |
+| File Type | enum | Floor Plan / 3D Design / Proposal / Land Document / Other |
+| Description | text (optional) | "৩ বেড ফ্লোর প্ল্যান, প্রথম ড্রাফট" |
+| Uploaded By | FK (user) | Marketing Executive — Sohel |
+| Uploaded At | datetime | 12 Sep 2026 |
 
 **Pipeline stages (Kanban-style board):**
 

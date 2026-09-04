@@ -17,22 +17,33 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { LEAD_SOURCES, SOURCE_LABEL } from '@/lib/leads';
+import { LEAD_SOURCES, LOCAL_CONTACT_RELATIONS, SOURCE_LABEL } from '@/lib/leads';
+import { COMMON_COUNTRIES, OTHER_COUNTRIES, OTHER_COUNTRY } from '@/lib/countries';
+import { PhoneInput } from '@/components/form/phone-input';
 import { createLead, updateLead } from './actions';
 
 /** ফর্মের defaultValue হিসেবে বসানোর মতো (সব string) লিড রূপ */
 export type EditableLead = {
   id: string;
   name: string;
-  phone: string;
+  /** ISO alpha-2 — ফোনের country picker */
+  phoneCountry: string;
+  /** country code ছাড়া লোকাল নম্বর */
+  phoneNumber: string;
+  /** ISO alpha-2 বা `OTHER` */
+  residenceCountry: string | null;
   email: string | null;
   source: LeadSource;
   unitId: string | null;
+  projectLocation: string | null;
   budgetMin: string | null;
   budgetMax: string | null;
   assignedToId: string | null;
   /** yyyy-MM-dd */
   nextFollowUpAt: string | null;
+  localContactName: string | null;
+  localContactPhone: string | null;
+  localContactRelation: string | null;
 };
 
 export type ExecutiveOption = { id: string; name: string; role: string };
@@ -83,9 +94,16 @@ export function LeadFormDialog({
       toast.success(result.message);
       setErrors({});
       onOpenChange(false);
-      router.refresh();
+
       const createdId = (result.data as { id?: string } | undefined)?.id;
-      if (createdId) onCreated?.(createdId);
+      if (createdId && onCreated) {
+        // caller নতুন পেজে navigate করবে — সেখানকার ডেটা এমনিতেই server থেকে আসে।
+        // সাথে `refresh()` ডাকলে দুটো নেভিগেশন একসাথে চলে, আর refresh জিতে গেলে
+        // push বাতিল হয়ে যায় (ইউজার ভুল পেজে গিয়ে পড়ে)।
+        onCreated(createdId);
+      } else {
+        router.refresh();
+      }
       return;
     }
 
@@ -121,20 +139,50 @@ export function LeadFormDialog({
             <FieldError message={errors.name} />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="lead-phone">ফোন</Label>
+            {/* key: dialog আবার খুললে country picker ও রিসেট হবে */}
+            <PhoneInput
+              key={`phone-${lead?.id ?? 'new'}`}
+              id="lead-phone"
+              name="phone"
+              defaultCountry={lead?.phoneCountry}
+              defaultNumber={lead?.phoneNumber}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              প্রবাসী ক্লায়েন্ট হলে তার নিজের দেশের নম্বর দিন — country code বেছে নিন।
+            </p>
+            <FieldError message={errors.phoneNumber} />
+            <FieldError message={errors.phoneCountry} />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="lead-phone">ফোন</Label>
-              <Input
-                id="lead-phone"
-                name="phone"
-                type="tel"
-                inputMode="numeric"
-                placeholder="01711223344"
-                defaultValue={lead?.phone}
-                required
-                autoComplete="off"
-              />
-              <FieldError message={errors.phone} />
+              <Label htmlFor="lead-residence">বর্তমান বসবাসের দেশ</Label>
+              <NativeSelect
+                id="lead-residence"
+                name="residenceCountry"
+                defaultValue={lead?.residenceCountry ?? ''}
+              >
+                <option value="">— নির্ধারিত নয় —</option>
+                <optgroup label="প্রচলিত">
+                  {COMMON_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.bn} ({c.en})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="অন্যান্য দেশ">
+                  {OTHER_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.bn} ({c.en})
+                    </option>
+                  ))}
+                  <option value={OTHER_COUNTRY}>🌍 অন্যান্য দেশ</option>
+                </optgroup>
+              </NativeSelect>
+              <FieldError message={errors.residenceCountry} />
             </div>
 
             <div className="space-y-2">
@@ -191,6 +239,18 @@ export function LeadFormDialog({
               ) : null}
               <FieldError message={errors.unitId} />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lead-project-location">প্রজেক্ট / জমির অবস্থান (ঐচ্ছিক)</Label>
+            <Input
+              id="lead-project-location"
+              name="projectLocation"
+              placeholder="যেমন: সোনাডাঙ্গা, খুলনা — নিজস্ব জমি"
+              defaultValue={lead?.projectLocation ?? ''}
+              autoComplete="off"
+            />
+            <FieldError message={errors.projectLocation} />
           </div>
 
           <fieldset className="space-y-2">
@@ -259,6 +319,62 @@ export function LeadFormDialog({
               <FieldError message={errors.nextFollowUpAt} />
             </div>
           </div>
+
+          {/* PRD সেকশন ৫.১ — প্রবাসী ক্লায়েন্টের বাংলাদেশে থাকা যোগাযোগকারী */}
+          <fieldset className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <legend className="px-1 text-sm font-medium leading-none">
+              লোকাল কন্টাক্ট (বাংলাদেশে)
+            </legend>
+            <p className="text-xs text-muted-foreground">
+              প্রবাসী ক্লায়েন্টের পক্ষে দেশে যার সাথে যোগাযোগ করা যাবে — ঐচ্ছিক।
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="lead-lc-name">নাম</Label>
+                <Input
+                  id="lead-lc-name"
+                  name="localContactName"
+                  placeholder="যেমন: মোঃ করিম"
+                  defaultValue={lead?.localContactName ?? ''}
+                  autoComplete="off"
+                />
+                <FieldError message={errors.localContactName} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lead-lc-relation">সম্পর্ক</Label>
+                <Input
+                  id="lead-lc-relation"
+                  name="localContactRelation"
+                  list="local-contact-relations"
+                  placeholder="ভাই / বন্ধু / আত্মীয়"
+                  defaultValue={lead?.localContactRelation ?? ''}
+                  autoComplete="off"
+                />
+                <datalist id="local-contact-relations">
+                  {LOCAL_CONTACT_RELATIONS.map((relation) => (
+                    <option key={relation} value={relation} />
+                  ))}
+                </datalist>
+                <FieldError message={errors.localContactRelation} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lead-lc-phone">ফোন (বাংলাদেশি নম্বর)</Label>
+              <Input
+                id="lead-lc-phone"
+                name="localContactPhone"
+                type="tel"
+                inputMode="numeric"
+                placeholder="01711223344"
+                defaultValue={lead?.localContactPhone ?? ''}
+                autoComplete="off"
+              />
+              <FieldError message={errors.localContactPhone} />
+            </div>
+          </fieldset>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button

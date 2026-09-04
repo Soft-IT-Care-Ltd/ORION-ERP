@@ -23,6 +23,18 @@ function isSource(value: string | undefined): value is LeadSource {
   return Boolean(value) && (LEAD_SOURCES as string[]).includes(value as string);
 }
 
+/**
+ * ফোন এখন E.164 তে সেভ হয় (`+8801711223344`), কিন্তু ইউজার স্বাভাবিকভাবে
+ * `01711223344` বা `+971 50 123 4567` লিখে খোঁজে। তাই অঙ্ক ছাড়া সব বাদ দিয়ে,
+ * শুরুর trunk prefix `0` ফেলে দিয়ে substring মিলানো হয়।
+ * অঙ্ক খুব কম হলে (নাম খোঁজা হচ্ছে ধরে নিয়ে) ফোন সার্চ বাদ যায়।
+ */
+function toPhoneQuery(q: string | undefined): string | undefined {
+  if (!q) return undefined;
+  const digits = q.replace(/\D/g, '').replace(/^0+/, '');
+  return digits.length >= 4 ? digits : undefined;
+}
+
 export default async function PipelinePage({
   searchParams,
 }: {
@@ -37,6 +49,7 @@ export default async function PipelinePage({
   const q = searchParams.q?.trim() || undefined;
   const source = isSource(searchParams.source) ? searchParams.source : undefined;
   const assignee = viewAll ? searchParams.assignee?.trim() || undefined : undefined;
+  const phoneQuery = toPhoneQuery(q);
 
   const where: Prisma.LeadWhereInput = {
     ...leadScope(user),
@@ -50,8 +63,15 @@ export default async function PipelinePage({
       ? {
           OR: [
             { name: { contains: q, mode: 'insensitive' } },
-            { phone: { contains: q } },
             { email: { contains: q, mode: 'insensitive' } },
+            { projectLocation: { contains: q, mode: 'insensitive' } },
+            { localContactName: { contains: q, mode: 'insensitive' } },
+            ...(phoneQuery
+              ? [
+                  { phone: { contains: phoneQuery } },
+                  { localContactPhone: { contains: phoneQuery } },
+                ]
+              : []),
           ],
         }
       : {}),

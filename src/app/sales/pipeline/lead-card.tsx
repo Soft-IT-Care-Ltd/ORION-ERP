@@ -8,6 +8,7 @@ import {
   GripVertical,
   Loader2,
   MoreVertical,
+  Paperclip,
   Pencil,
   Phone,
   User2,
@@ -113,12 +114,25 @@ function CardBody({
         </div>
 
         <a
-          href={`tel:${lead.phone}`}
+          href={`tel:${lead.phoneE164}`}
           className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <Phone className="h-3 w-3 shrink-0" />
-          {lead.phone}
+          <span className="truncate">{lead.phone}</span>
         </a>
+
+        {/* প্রবাসী ক্লায়েন্ট — দেশ সেট থাকলে ফ্ল্যাগ ব্যাজ (PRD সেকশন ৫.১) */}
+        {lead.residence ? (
+          <p
+            className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
+            title={`বসবাস: ${lead.residence.label}`}
+          >
+            <span aria-hidden className="shrink-0 text-sm leading-none">
+              {lead.residence.flag}
+            </span>
+            <span className="truncate">{lead.residence.label}</span>
+          </p>
+        ) : null}
 
         {lead.budgetLabel ? (
           <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -146,6 +160,16 @@ function CardBody({
             >
               <CalendarClock className="h-3 w-3 shrink-0" />
               {lead.followUpLabel}
+            </span>
+          ) : null}
+
+          {lead.documentCount > 0 ? (
+            <span
+              className="flex items-center gap-0.5 text-[11px] font-medium text-muted-foreground"
+              title={`${lead.documentCount} টি সংযুক্ত ফাইল`}
+            >
+              <Paperclip className="h-3 w-3 shrink-0" />
+              {lead.documentCount}
             </span>
           ) : null}
         </div>

@@ -26,7 +26,7 @@ export function PipelineFilter({
         <Input
           name="q"
           defaultValue={q ?? ''}
-          placeholder="নাম বা ফোন দিয়ে খুঁজুন"
+          placeholder="নাম, ফোন বা লোকেশন দিয়ে খুঁজুন"
           className="pl-9"
           aria-label="লিড খুঁজুন"
         />

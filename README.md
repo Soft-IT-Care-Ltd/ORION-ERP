@@ -4,7 +4,8 @@ Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui + Prisma + PostgreSQ
 
 স্পেসিফিকেশন: [`01_PRD.md`](01_PRD.md) · প্ল্যান: [`02_BUILD_PLAN.md`](02_BUILD_PLAN.md) · স্কিমা: [`03_schema.prisma`](03_schema.prisma) · Claude Code instructions: [`CLAUDE.md`](CLAUDE.md)
 
-**বর্তমান অবস্থা: Phase 2 (Lead Management & Sales Pipeline) সম্পন্ন।**
+**বর্তমান অবস্থা: Phase 2 (Lead Management & Sales Pipeline) সম্পন্ন** — প্রবাসী-কেন্দ্রিক
+লিড ফিল্ড (international ফোন, residence country, লোকাল কন্টাক্ট) ও Lead Documents সহ।
 
 ---
 
@@ -123,19 +124,24 @@ src/
 │   ├── sales/             # MARKETING
 │   │   ├── page.tsx       # ফানেল ড্যাশবোর্ড (stage-wise count, scope অনুযায়ী)
 │   │   ├── pipeline/      # Kanban বোর্ড (dnd-kit drag & drop)
-│   │   └── leads/         # lead server actions, ফর্ম, detail + timeline
+│   │   └── leads/         # lead server actions, ফর্ম, detail + timeline + ডকুমেন্ট
 │   ├── engineer/          # ENGINEER
 │   ├── accounts/          # ACCOUNTS
 │   ├── customer/          # CUSTOMER
 │   └── api/auth/[...nextauth]/
 ├── components/
 │   ├── ui/                # shadcn/ui
+│   ├── form/              # PhoneInput (country code picker + লোকাল নম্বর)
 │   ├── layout/            # PanelShell, sidebar, mobile drawer, user menu
 │   ├── phase-timeline/    # Phase 3
 │   └── payment-schedule/  # Phase 4
 ├── lib/
 │   ├── auth.ts            # NextAuth config (Credentials + JWT + role)
 │   ├── prisma.ts
+│   ├── countries.ts       # দেশ + dial code (প্রবাসী residence ও ফোন picker)
+│   ├── phone.ts           # E.164 parse/format (libphonenumber, server-only)
+│   ├── upload.ts          # ফাইল স্টোরেজ — public/uploads (পরে S3/R2)
+│   ├── upload-limits.ts   # আপলোড সীমা ও অনুমোদিত টাইপ (client-safe)
 │   ├── rbac.ts            # permission matrix (PRD সেকশন ৪)
 │   ├── nav.ts             # panel-wise sidebar মেনু
 │   ├── guards.ts          # server action এর permission গার্ড

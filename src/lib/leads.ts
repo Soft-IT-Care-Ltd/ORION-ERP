@@ -1,4 +1,4 @@
-import type { LeadActivityType, LeadSource, LeadStage } from '@prisma/client';
+import type { LeadActivityType, LeadFileType, LeadSource, LeadStage } from '@prisma/client';
 
 /**
  * Lead pipeline এর কনস্ট্যান্ট ও লেবেল — PRD সেকশন ৫.১।
@@ -138,3 +138,44 @@ export function budgetLabel(
   if (min != null && max != null) return `${format(min)} – ${format(max)}`;
   return format((min ?? max) as number);
 }
+
+/* ---------------------------------------------------------------- documents */
+
+/** PRD সেকশন ৫.১ — Lead Documents এর File Type */
+export const FILE_TYPE_LABEL: Record<LeadFileType, string> = {
+  FLOOR_PLAN: 'ফ্লোর প্ল্যান',
+  THREE_D_DESIGN: '3D ডিজাইন',
+  PROPOSAL: 'প্রস্তাবনা',
+  LAND_DOCUMENT: 'জমির দলিল',
+  OTHER: 'অন্যান্য',
+};
+
+export const LEAD_FILE_TYPES = Object.keys(FILE_TYPE_LABEL) as LeadFileType[];
+
+/** ডকুমেন্ট লিস্টে টাইপ ব্যাজের রঙ */
+export const FILE_TYPE_BADGE: Record<LeadFileType, string> = {
+  FLOOR_PLAN: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
+  THREE_D_DESIGN: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  PROPOSAL: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
+  LAND_DOCUMENT: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  OTHER: 'bg-muted text-muted-foreground',
+};
+
+/* ------------------------------------------------------- প্রবাসী local contact */
+
+/**
+ * লোকাল কন্টাক্টের সম্পর্ক — ফ্রি-টেক্সট ফিল্ডে `<datalist>` সাজেশন হিসেবে যায়
+ * (PRD এ ফিল্ডটি text, তাই তালিকার বাইরেও লেখা যাবে)।
+ */
+export const LOCAL_CONTACT_RELATIONS = [
+  'ভাই',
+  'বোন',
+  'বাবা',
+  'মা',
+  'স্ত্রী',
+  'ছেলে',
+  'বন্ধু',
+  'আত্মীয়',
+  'প্রতিবেশী',
+  'ব্যবসায়িক অংশীদার',
+] as const;

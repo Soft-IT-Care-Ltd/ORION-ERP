@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { LeadActivityType, LeadSource, LeadStage, Role } from '@prisma/client';
+import { LeadActivityType, LeadFileType, LeadSource, LeadStage, Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser, type AuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
@@ -14,12 +14,15 @@ import {
   NOT_FOUND,
   zodErrors,
 } from '@/lib/action-result';
-import { lostReasonLabel, STAGE_LABEL } from '@/lib/leads';
+import { FILE_TYPE_LABEL, lostReasonLabel, STAGE_LABEL } from '@/lib/leads';
+import { saveUploadedFile } from '@/lib/upload';
+import { countryLabel } from '@/lib/countries';
 import {
   addNoteSchema,
   changeStageSchema,
   createLeadSchema,
   updateLeadSchema,
+  uploadDocumentSchema,
 } from '@/lib/validations/lead';
 
 export type { ActionResult } from '@/lib/action-result';
@@ -99,14 +102,58 @@ function field(formData: FormData, key: string) {
 function leadFormValues(formData: FormData) {
   return {
     name: field(formData, 'name'),
-    phone: field(formData, 'phone'),
+    // ফোন দুই ভাগে আসে — country picker এর ISO কোড ও লোকাল নম্বর
+    phoneCountry: field(formData, 'phoneCountry'),
+    phoneNumber: field(formData, 'phoneNumber'),
+    residenceCountry: field(formData, 'residenceCountry'),
     email: field(formData, 'email'),
     source: field(formData, 'source'),
     unitId: field(formData, 'unitId'),
+    projectLocation: field(formData, 'projectLocation'),
     budgetMin: field(formData, 'budgetMin'),
     budgetMax: field(formData, 'budgetMax'),
     assignedToId: field(formData, 'assignedToId'),
     nextFollowUpAt: field(formData, 'nextFollowUpAt'),
+    localContactName: field(formData, 'localContactName'),
+    localContactPhone: field(formData, 'localContactPhone'),
+    localContactRelation: field(formData, 'localContactRelation'),
+  };
+}
+
+/** Lead টেবিলে যাওয়া কলামগুলো — create ও update দুই জায়গায় একই ম্যাপিং */
+function leadWriteData(
+  input: {
+    name: string;
+    phone: string;
+    email?: string;
+    source: string;
+    unitId?: string;
+    residenceCountry?: string;
+    projectLocation?: string;
+    budgetMin?: number;
+    budgetMax?: number;
+    nextFollowUpAt?: string;
+    localContactName?: string;
+    localContactPhone?: string;
+    localContactRelation?: string;
+  },
+  assignedToId: string | null,
+) {
+  return {
+    name: input.name,
+    phone: input.phone,
+    email: input.email || null,
+    source: input.source as LeadSource,
+    unitId: input.unitId ?? null,
+    residenceCountry: input.residenceCountry ?? null,
+    projectLocation: input.projectLocation ?? null,
+    budgetMin: input.budgetMin ?? null,
+    budgetMax: input.budgetMax ?? null,
+    assignedToId,
+    nextFollowUpAt: parseFollowUpDate(input.nextFollowUpAt),
+    localContactName: input.localContactName ?? null,
+    localContactPhone: input.localContactPhone ?? null,
+    localContactRelation: input.localContactRelation ?? null,
   };
 }
 
@@ -132,25 +179,18 @@ export async function createLead(formData: FormData): Promise<ActionResult<{ id:
   try {
     const lead: { id: string; name: string } = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
-        data: {
-          name: input.name,
-          phone: input.phone,
-          email: input.email || null,
-          source: input.source as LeadSource,
-          unitId: input.unitId ?? null,
-          budgetMin: input.budgetMin ?? null,
-          budgetMax: input.budgetMax ?? null,
-          assignedToId,
-          nextFollowUpAt: parseFollowUpDate(input.nextFollowUpAt),
-        },
+        data: leadWriteData(input, assignedToId),
         select: { id: true, name: true },
       });
 
+      const residence = countryLabel(input.residenceCountry);
       await tx.leadActivity.create({
         data: {
           leadId: created.id,
           type: LeadActivityType.CREATED,
-          note: `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.NEW})`,
+          note: residence
+            ? `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.NEW}) · অবস্থান: ${residence}`
+            : `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.NEW})`,
           createdById: actor.id,
         },
       });
@@ -163,7 +203,12 @@ export async function createLead(formData: FormData): Promise<ActionResult<{ id:
       entityId: lead.id,
       userId: actor.id,
       action: 'LEAD_CREATED',
-      metadata: { name: lead.name, source: input.source, assignedToId },
+      metadata: {
+        name: lead.name,
+        source: input.source,
+        assignedToId,
+        ...(input.residenceCountry ? { residenceCountry: input.residenceCountry } : {}),
+      },
     });
 
     // অন্য কাউকে assign করা হলে তাকে জানানো
@@ -201,7 +246,13 @@ export async function updateLead(formData: FormData): Promise<ActionResult> {
   // scope সহ — অন্যের লিড id দিয়েও এডিট করা যাবে না
   const existing = await prisma.lead.findFirst({
     where: { id: input.id, ...leadScope(actor) },
-    select: { id: true, name: true, assignedToId: true, nextFollowUpAt: true },
+    select: {
+      id: true,
+      name: true,
+      assignedToId: true,
+      nextFollowUpAt: true,
+      residenceCountry: true,
+    },
   });
   if (!existing) return NOT_FOUND;
 
@@ -220,17 +271,7 @@ export async function updateLead(formData: FormData): Promise<ActionResult> {
     await prisma.$transaction(async (tx) => {
       await tx.lead.update({
         where: { id: input.id },
-        data: {
-          name: input.name,
-          phone: input.phone,
-          email: input.email || null,
-          source: input.source as LeadSource,
-          unitId: input.unitId ?? null,
-          budgetMin: input.budgetMin ?? null,
-          budgetMax: input.budgetMax ?? null,
-          assignedToId,
-          nextFollowUpAt,
-        },
+        data: { ...leadWriteData(input, assignedToId), nextFollowUpAt },
       });
 
       const timeline: { type: LeadActivityType; note: string }[] = [];
@@ -408,4 +449,107 @@ export async function addLeadNote(input: { id: string; note: string }): Promise<
 
   revalidateLead(id);
   return { ok: true, message: 'নোট যোগ হয়েছে' };
+}
+
+// ---------------------------------------------------------------- documents
+
+/** একবারে সর্বোচ্চ কতগুলো ফাইল — accidental bulk আপলোড ঠেকাতে */
+const MAX_FILES_PER_UPLOAD = 10;
+
+/**
+ * PRD সেকশন ৫.১ — Lead Documents (Floor Plan / 3D Design / Proposal / জমির দলিল)।
+ * একসাথে একাধিক ফাইল নেওয়া যায়; প্রতিটির টাইপ ও বিবরণ একই সাবমিশনে প্রযোজ্য।
+ */
+export async function uploadLeadDocuments(
+  formData: FormData,
+): Promise<ActionResult<{ uploaded: number }>> {
+  const actor = await getAuthorizedUser('document:upload');
+  if (!actor) return FORBIDDEN;
+
+  const parsed = uploadDocumentSchema.safeParse({
+    leadId: field(formData, 'leadId'),
+    fileType: field(formData, 'fileType'),
+    description: field(formData, 'description'),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: 'ইনপুট সঠিক নয়', fieldErrors: zodErrors(parsed.error) };
+  }
+  const { leadId, description } = parsed.data;
+  const fileType = parsed.data.fileType as LeadFileType;
+
+  // scope সহ — অন্যের লিডে ফাইল যোগ করা যাবে না
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, ...leadScope(actor) },
+    select: { id: true },
+  });
+  if (!lead) return NOT_FOUND;
+
+  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+  // multipart filename হেডার latin-1 এ ডিকোড হয় (বাংলা নাম নষ্ট হয়ে যায়),
+  // তাই client একই ক্রমে আসল নামগুলো টেক্সট ফিল্ড হিসেবেও পাঠায়
+  const clientNames = formData.getAll('fileNames').map((n) => String(n));
+
+  if (files.length === 0) return { ok: false, message: 'অন্তত একটি ফাইল নির্বাচন করুন' };
+  if (files.length > MAX_FILES_PER_UPLOAD) {
+    return { ok: false, message: `একবারে সর্বোচ্চ ${MAX_FILES_PER_UPLOAD} টি ফাইল দেওয়া যাবে` };
+  }
+
+  const saved: { fileUrl: string; fileName: string }[] = [];
+  const failed: string[] = [];
+
+  for (const [index, file] of files.entries()) {
+    const originalName = clientNames[index] || file.name;
+    const result = await saveUploadedFile(file, ['leads', leadId], originalName);
+    if (result.ok) saved.push({ fileUrl: result.file.url, fileName: result.file.fileName });
+    else failed.push(`${originalName} — ${result.reason}`);
+  }
+
+  // একটিও সেভ না হলে DB তে কিছু লেখার দরকার নেই
+  if (saved.length === 0) {
+    return { ok: false, message: failed[0] ?? 'কোনো ফাইল আপলোড করা যায়নি' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.leadDocument.createMany({
+      data: saved.map((f) => ({
+        leadId,
+        fileUrl: f.fileUrl,
+        fileName: f.fileName,
+        fileType,
+        description: description ?? null,
+        uploadedById: actor.id,
+      })),
+    });
+
+    await tx.leadActivity.create({
+      data: {
+        leadId,
+        type: LeadActivityType.NOTE,
+        note: `${saved.length} টি ফাইল যোগ করা হয়েছে — ${FILE_TYPE_LABEL[fileType]} (${saved
+          .map((f) => f.fileName)
+          .join(', ')})`,
+        createdById: actor.id,
+      },
+    });
+  });
+
+  await logActivity({
+    entityType: 'Lead',
+    entityId: leadId,
+    userId: actor.id,
+    action: 'DOCUMENT_UPLOADED',
+    metadata: { fileType, count: saved.length, fileNames: saved.map((f) => f.fileName) },
+  });
+
+  revalidateLead(leadId);
+
+  // আংশিক সফল হলে কোনটি বাদ পড়ল সেটাও জানানো দরকার
+  return {
+    ok: true,
+    message:
+      failed.length === 0
+        ? `${saved.length} টি ফাইল আপলোড হয়েছে`
+        : `${saved.length} টি আপলোড হয়েছে · ${failed.length} টি বাদ পড়েছে (${failed[0]})`,
+    data: { uploaded: saved.length },
+  };
 }

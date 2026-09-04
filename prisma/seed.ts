@@ -21,30 +21,38 @@ function daysFromNow(days: number) {
   return d;
 }
 
-/** Phase 2 ডেমো লিড — পাইপলাইন বোর্ড খালি না থাকার জন্য */
+/**
+ * Phase 2 ডেমো লিড — পাইপলাইন বোর্ড খালি না থাকার জন্য।
+ * phone সবসময় E.164 (PRD সেকশন ৫.১ — প্রবাসী ক্লায়েন্ট নিজের দেশের নম্বর দেন)।
+ */
 const demoLeads: {
   name: string;
   phone: string;
+  residenceCountry?: string;
   email?: string;
   source: LeadSource;
   stage: LeadStage;
+  projectLocation?: string;
   budgetMin?: number;
   budgetMax?: number;
   followUpInDays?: number;
   lostReason?: string;
+  localContactName?: string;
+  localContactPhone?: string;
+  localContactRelation?: string;
 }[] = [
-  { name: 'মোঃ রফিকুল ইসলাম', phone: '01711111101', email: 'rafiqul@example.com', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.NEW, budgetMin: 4500000, budgetMax: 5500000, followUpInDays: 1 },
-  { name: 'সালমা বেগম', phone: '01711111102', source: LeadSource.WEBSITE, stage: LeadStage.NEW, budgetMin: 3500000, budgetMax: 4200000, followUpInDays: 3 },
-  { name: 'আবদুল করিম', phone: '01711111103', email: 'karim@example.com', source: LeadSource.REFERRAL, stage: LeadStage.CONTACTED, budgetMin: 6000000, budgetMax: 7500000, followUpInDays: -2 },
-  { name: 'তানভীর আহমেদ', phone: '01711111104', source: LeadSource.WALK_IN, stage: LeadStage.CONTACTED, followUpInDays: 0 },
-  { name: 'নুসরাত জাহান', phone: '01711111105', email: 'nusrat@example.com', source: LeadSource.EXHIBITION, stage: LeadStage.SITE_VISIT_SCHEDULED, budgetMin: 5000000, budgetMax: 6000000, followUpInDays: 2 },
-  { name: 'মাহবুব হোসেন', phone: '01711111106', source: LeadSource.COLD_CALL, stage: LeadStage.SITE_VISIT_DONE, budgetMin: 4800000, followUpInDays: 5 },
-  { name: 'শারমিন আক্তার', phone: '01711111107', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.NEGOTIATION, budgetMin: 5200000, budgetMax: 5800000, followUpInDays: -1 },
-  { name: 'ইঞ্জি. সাইফুল ইসলাম', phone: '01711111108', email: 'saiful@example.com', source: LeadSource.REFERRAL, stage: LeadStage.BOOKING, budgetMin: 7000000, budgetMax: 8000000, followUpInDays: 7 },
-  { name: 'ফারুক হাসান', phone: '01711111109', source: LeadSource.WEBSITE, stage: LeadStage.SALE_AGREEMENT_SIGNED, budgetMin: 6500000 },
-  { name: 'রোকেয়া সুলতানা', phone: '01711111110', source: LeadSource.WALK_IN, stage: LeadStage.WON, budgetMin: 5500000, budgetMax: 5500000 },
-  { name: 'জাহিদ হাসান', phone: '01711111111', source: LeadSource.COLD_CALL, stage: LeadStage.LOST, budgetMin: 3000000, lostReason: 'Price too high' },
-  { name: 'মিতু রহমান', phone: '01711111112', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.LOST, lostReason: 'No response' },
+  { name: 'মোঃ রফিকুল ইসলাম', phone: '+971501234501', residenceCountry: 'AE', email: 'rafiqul@example.com', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.NEW, projectLocation: 'সোনাডাঙ্গা, খুলনা — নিজস্ব জমি', budgetMin: 4500000, budgetMax: 5500000, followUpInDays: 1, localContactName: 'মোঃ করিম', localContactPhone: '+8801711111201', localContactRelation: 'ভাই' },
+  { name: 'সালমা বেগম', phone: '+8801711111102', residenceCountry: 'BD', source: LeadSource.WEBSITE, stage: LeadStage.NEW, projectLocation: 'বয়রা, খুলনা', budgetMin: 3500000, budgetMax: 4200000, followUpInDays: 3 },
+  { name: 'আবদুল করিম', phone: '+966551234503', residenceCountry: 'SA', email: 'karim@example.com', source: LeadSource.REFERRAL, stage: LeadStage.CONTACTED, projectLocation: 'দৌলতপুর, খুলনা', budgetMin: 6000000, budgetMax: 7500000, followUpInDays: -2, localContactName: 'আনোয়ার হোসেন', localContactPhone: '+8801711111203', localContactRelation: 'বন্ধু' },
+  { name: 'তানভীর আহমেদ', phone: '+8801711111104', residenceCountry: 'BD', source: LeadSource.WALK_IN, stage: LeadStage.CONTACTED, followUpInDays: 0 },
+  { name: 'নুসরাত জাহান', phone: '+447700900505', residenceCountry: 'GB', email: 'nusrat@example.com', source: LeadSource.EXHIBITION, stage: LeadStage.SITE_VISIT_SCHEDULED, projectLocation: 'খালিশপুর, খুলনা', budgetMin: 5000000, budgetMax: 6000000, followUpInDays: 2, localContactName: 'রেহানা পারভীন', localContactPhone: '+8801711111205', localContactRelation: 'বোন' },
+  { name: 'মাহবুব হোসেন', phone: '+60123456506', residenceCountry: 'MY', source: LeadSource.COLD_CALL, stage: LeadStage.SITE_VISIT_DONE, budgetMin: 4800000, followUpInDays: 5, localContactName: 'শফিক মিয়া', localContactPhone: '+8801711111206', localContactRelation: 'আত্মীয়' },
+  { name: 'শারমিন আক্তার', phone: '+8801711111107', residenceCountry: 'BD', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.NEGOTIATION, projectLocation: 'রূপসা, খুলনা', budgetMin: 5200000, budgetMax: 5800000, followUpInDays: -1 },
+  { name: 'ইঞ্জি. সাইফুল ইসলাম', phone: '+97455123508', residenceCountry: 'QA', email: 'saiful@example.com', source: LeadSource.REFERRAL, stage: LeadStage.BOOKING, projectLocation: 'গল্লামারী, খুলনা', budgetMin: 7000000, budgetMax: 8000000, followUpInDays: 7, localContactName: 'নাসির উদ্দিন', localContactPhone: '+8801711111208', localContactRelation: 'ভাই' },
+  { name: 'ফারুক হাসান', phone: '+393331234509', residenceCountry: 'IT', source: LeadSource.WEBSITE, stage: LeadStage.SALE_AGREEMENT_SIGNED, projectLocation: 'নিরালা, খুলনা', budgetMin: 6500000, localContactName: 'জাহানারা বেগম', localContactPhone: '+8801711111209', localContactRelation: 'মা' },
+  { name: 'রোকেয়া সুলতানা', phone: '+8801711111110', residenceCountry: 'BD', source: LeadSource.WALK_IN, stage: LeadStage.WON, budgetMin: 5500000, budgetMax: 5500000 },
+  { name: 'জাহিদ হাসান', phone: '+96550123511', residenceCountry: 'KW', source: LeadSource.COLD_CALL, stage: LeadStage.LOST, budgetMin: 3000000, lostReason: 'Price too high' },
+  { name: 'মিতু রহমান', phone: '+8801711111112', residenceCountry: 'BD', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.LOST, lostReason: 'No response' },
 ];
 
 async function seedLeads(assignedToId: string) {
@@ -60,11 +68,16 @@ async function seedLeads(assignedToId: string) {
         name: l.name,
         phone: l.phone,
         email: l.email ?? null,
+        residenceCountry: l.residenceCountry ?? null,
         source: l.source,
         stage: l.stage,
+        projectLocation: l.projectLocation ?? null,
         lostReason: l.lostReason ?? null,
         budgetMin: l.budgetMin ?? null,
         budgetMax: l.budgetMax ?? null,
+        localContactName: l.localContactName ?? null,
+        localContactPhone: l.localContactPhone ?? null,
+        localContactRelation: l.localContactRelation ?? null,
         assignedToId,
         nextFollowUpAt:
           l.followUpInDays === undefined ? null : daysFromNow(l.followUpInDays),

@@ -10,7 +10,10 @@ import type { EditableLead } from '../leads/lead-form-dialog';
 export type PipelineLead = {
   id: string;
   name: string;
+  /** পাঠযোগ্য রূপ — e.g. `+971 50 123 4567` */
   phone: string;
+  /** `tel:` লিংকের জন্য */
+  phoneE164: string;
   stage: LeadStage;
   sourceLabel: string;
   assignedToName: string | null;
@@ -18,6 +21,10 @@ export type PipelineLead = {
   followUpTone: FollowUpTone | null;
   budgetLabel: string | null;
   lostReason: string | null;
+  /** প্রবাসী ব্যাজ — দেশ সেট করা থাকলে (PRD সেকশন ৫.১, প্রবাসী-কেন্দ্রিক নোট) */
+  residence: { flag: string; label: string } | null;
+  /** সংযুক্ত ফাইলের সংখ্যা — ০ হলে কার্ডে আইকন দেখানো হয় না */
+  documentCount: number;
   /** এডিট ডায়ালগ যেন আবার ফেচ ছাড়াই খুলতে পারে */
   editable: EditableLead;
 };

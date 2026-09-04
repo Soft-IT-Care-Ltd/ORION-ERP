@@ -49,6 +49,14 @@ enum LeadSource {
   OTHER
 }
 
+enum LeadFileType {
+  FLOOR_PLAN
+  THREE_D_DESIGN
+  PROPOSAL
+  LAND_DOCUMENT
+  OTHER
+}
+
 enum UnitStatus {
   AVAILABLE
   BOOKED
@@ -91,6 +99,7 @@ model User {
 
   assignedLeads Lead[]        @relation("AssignedLeads")
   leadActivities LeadActivity[] @relation("LeadActivityAuthor")
+  uploadedLeadDocuments LeadDocument[] @relation("LeadDocumentUploader")
   phaseUpdates  PhaseUpdate[]
   payments      Payment[]     @relation("ReceivedByUser")
   customer      Customer?
@@ -99,29 +108,51 @@ model User {
 }
 
 model Lead {
-  id              String     @id @default(cuid())
-  name            String
-  phone           String
-  email           String?
-  source          LeadSource
-  interestedUnit  Unit?      @relation(fields: [unitId], references: [id])
-  unitId          String?
-  budgetMin       Decimal?
-  budgetMax       Decimal?
-  stage           LeadStage  @default(NEW)
-  lostReason      String?
-  assignedTo      User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
-  assignedToId    String?
-  nextFollowUpAt  DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                   String     @id @default(cuid())
+  name                 String
+  phone                String     // E.164, international format সহ — e.g. +971501234567
+  residenceCountry     String?    // ISO 3166-1 alpha-2, প্রবাসী হলে বর্তমানে যে দেশে থাকে — e.g. "AE"
+  email                String?
+  source               LeadSource
+  interestedUnit       Unit?      @relation(fields: [unitId], references: [id])
+  unitId               String?
+  projectLocation      String?    // ক্লায়েন্টের জমি/প্রজেক্টের প্রকৃত অবস্থান
+  budgetMin            Decimal?
+  budgetMax            Decimal?
+  stage                LeadStage  @default(NEW)
+  lostReason           String?
+  assignedTo           User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedToId         String?
+  nextFollowUpAt       DateTime?
+  // প্রবাসী ক্লায়েন্টের বাংলাদেশে থাকা লোকাল কন্টাক্ট (যোগাযোগের সুবিধার জন্য)
+  localContactName     String?
+  localContactPhone    String?
+  localContactRelation String?    // e.g. "ভাই", "বন্ধু", "আত্মীয়"
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
-  activities      LeadActivity[]
-  sale            Sale?
+  activities           LeadActivity[]
+  documents            LeadDocument[]
+  sale                 Sale?
 
   // পাইপলাইন বোর্ড ও ফলো-আপ কুয়েরির জন্য
   @@index([assignedToId, stage])
   @@index([nextFollowUpAt])
+}
+
+model LeadDocument {
+  id           String       @id @default(cuid())
+  lead         Lead         @relation(fields: [leadId], references: [id])
+  leadId       String
+  fileUrl      String
+  fileName     String
+  fileType     LeadFileType @default(OTHER)
+  description  String?
+  uploadedBy   User         @relation("LeadDocumentUploader", fields: [uploadedById], references: [id])
+  uploadedById String
+  uploadedAt   DateTime     @default(now())
+
+  @@index([leadId, uploadedAt])
 }
 
 model LeadActivity {
