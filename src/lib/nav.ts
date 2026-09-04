@@ -22,6 +22,8 @@ export type NavItem = {
   icon: LucideIcon;
   /** পেজটি এখনো তৈরি হয়নি — কোন ফেজে আসবে (sidebar এ disabled দেখাবে) */
   upcomingPhase?: number;
+  /** এই prefix গুলোতে থাকলেও আইটেমটি active দেখাবে (যেমন লিড ডিটেইল পেজ) */
+  matchPrefixes?: string[];
 };
 
 export type Panel = {
@@ -41,7 +43,8 @@ export const PANELS: Record<string, Panel> = {
     items: [
       { label: 'ড্যাশবোর্ড', href: '/admin', icon: Home },
       { label: 'ইউজার ম্যানেজমেন্ট', href: '/admin/users', icon: Users },
-      { label: 'লিড ও পাইপলাইন', href: '/admin/leads', icon: KanbanSquare, upcomingPhase: 2 },
+      // ADMIN সব লিড দেখে — সেলস প্যানেলের বোর্ডটিই ব্যবহার হয় (ROUTE_ROLES এ অনুমোদিত)
+      { label: 'লিড ও পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare },
       { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2, upcomingPhase: 3 },
       { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet, upcomingPhase: 4 },
       { label: 'রিপোর্ট', href: '/admin/reports', icon: BarChart3, upcomingPhase: 6 },
@@ -52,8 +55,12 @@ export const PANELS: Record<string, Panel> = {
     title: 'সেলস / মার্কেটিং প্যানেল',
     items: [
       { label: 'ড্যাশবোর্ড', href: '/sales', icon: Home },
-      { label: 'পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare, upcomingPhase: 2 },
-      { label: 'আমার লিড', href: '/sales/leads', icon: ListChecks, upcomingPhase: 2 },
+      {
+        label: 'পাইপলাইন',
+        href: '/sales/pipeline',
+        icon: KanbanSquare,
+        matchPrefixes: ['/sales/leads'],
+      },
       { label: 'ফলো-আপ', href: '/sales/follow-ups', icon: CalendarClock, upcomingPhase: 2 },
       { label: 'পারফরম্যান্স', href: '/sales/performance', icon: TrendingUp, upcomingPhase: 6 },
     ],

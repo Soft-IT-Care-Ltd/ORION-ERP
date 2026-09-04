@@ -30,6 +30,14 @@ enum LeadStage {
   LOST
 }
 
+enum LeadActivityType {
+  CREATED
+  NOTE
+  STAGE_CHANGED
+  ASSIGNED
+  FOLLOW_UP_SET
+}
+
 enum LeadSource {
   FACEBOOK_ADS
   WEBSITE
@@ -81,6 +89,7 @@ model User {
   createdAt     DateTime @default(now())
 
   assignedLeads Lead[]        @relation("AssignedLeads")
+  leadActivities LeadActivity[] @relation("LeadActivityAuthor")
   phaseUpdates  PhaseUpdate[]
   payments      Payment[]     @relation("ReceivedByUser")
   customer      Customer?
@@ -108,14 +117,24 @@ model Lead {
 
   activities      LeadActivity[]
   sale            Sale?
+
+  // পাইপলাইন বোর্ড ও ফলো-আপ কুয়েরির জন্য
+  @@index([assignedToId, stage])
+  @@index([nextFollowUpAt])
 }
 
 model LeadActivity {
-  id        String   @id @default(cuid())
-  lead      Lead     @relation(fields: [leadId], references: [id])
-  leadId    String
-  note      String
-  createdAt DateTime @default(now())
+  id          String           @id @default(cuid())
+  lead        Lead             @relation(fields: [leadId], references: [id])
+  leadId      String
+  type        LeadActivityType @default(NOTE)
+  note        String
+  // system-generated হলে null (যেমন future automation/cron)
+  createdBy   User?            @relation("LeadActivityAuthor", fields: [createdById], references: [id])
+  createdById String?
+  createdAt   DateTime         @default(now())
+
+  @@index([leadId, createdAt])
 }
 
 model Project {

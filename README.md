@@ -4,7 +4,7 @@ Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui + Prisma + PostgreSQ
 
 স্পেসিফিকেশন: [`01_PRD.md`](01_PRD.md) · প্ল্যান: [`02_BUILD_PLAN.md`](02_BUILD_PLAN.md) · স্কিমা: [`03_schema.prisma`](03_schema.prisma) · Claude Code instructions: [`CLAUDE.md`](CLAUDE.md)
 
-**বর্তমান অবস্থা: Phase 1 (Auth + RBAC + Base Layout) সম্পন্ন।**
+**বর্তমান অবস্থা: Phase 2 (Lead Management & Sales Pipeline) সম্পন্ন।**
 
 ---
 
@@ -121,6 +121,9 @@ src/
 │   ├── admin/             # ADMIN
 │   │   └── users/         # ইউজার ম্যানেজমেন্ট (list + server actions)
 │   ├── sales/             # MARKETING
+│   │   ├── page.tsx       # ফানেল ড্যাশবোর্ড (stage-wise count, scope অনুযায়ী)
+│   │   ├── pipeline/      # Kanban বোর্ড (dnd-kit drag & drop)
+│   │   └── leads/         # lead server actions, ফর্ম, detail + timeline
 │   ├── engineer/          # ENGINEER
 │   ├── accounts/          # ACCOUNTS
 │   ├── customer/          # CUSTOMER
@@ -128,7 +131,6 @@ src/
 ├── components/
 │   ├── ui/                # shadcn/ui
 │   ├── layout/            # PanelShell, sidebar, mobile drawer, user menu
-│   ├── pipeline/          # Phase 2
 │   ├── phase-timeline/    # Phase 3
 │   └── payment-schedule/  # Phase 4
 ├── lib/
@@ -137,6 +139,9 @@ src/
 │   ├── rbac.ts            # permission matrix (PRD সেকশন ৪)
 │   ├── nav.ts             # panel-wise sidebar মেনু
 │   ├── guards.ts          # server action এর permission গার্ড
+│   ├── action-result.ts   # server action এর common return shape
+│   ├── leads.ts           # stage/source/lost-reason কনস্ট্যান্ট ও লেবেল
+│   ├── lead-access.ts     # লিড ownership scope (ADMIN সব / MARKETING নিজের)
 │   ├── activity-log.ts    # audit trail helper
 │   ├── notifications.ts
 │   ├── utils.ts
@@ -192,6 +197,9 @@ npx shadcn@2.10.0 add dialog select textarea
 
 ## ৭. পরবর্তী ধাপ
 
-Phase 2 — Lead Management & Sales Pipeline (Kanban board, lead CRUD, follow-up)। প্রম্পট: `04_PROMPTS.md` এর Phase 2 সেকশন।
+Phase 3 — Project, Unit & Phase Timeline। প্রম্পট: `04_PROMPTS.md` এর Phase 3 সেকশন।
 
-সাইডবারে **P2 / P3 / P4 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।
+Phase 2 এর যে কাজটি Phase 3 এ গড়াবে: লিড **Won** এ গেলে PRD সেকশন ৫.১ অনুযায়ী
+Project + Customer + Payment Schedule ড্রাফট অটো-তৈরি (এখন শুধু টাইমলাইনে নোট পড়ে)।
+
+সাইডবারে **P3 / P4 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।

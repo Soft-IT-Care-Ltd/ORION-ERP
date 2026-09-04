@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import type { ZodError } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
+import { type ActionResult, FORBIDDEN, zodErrors } from '@/lib/action-result';
 import {
   createUserSchema,
   resetPasswordSchema,
@@ -14,20 +14,8 @@ import {
   updateUserSchema,
 } from '@/lib/validations/user';
 
-export type ActionResult =
-  | { ok: true; message: string }
-  | { ok: false; message: string; fieldErrors?: Record<string, string> };
-
-const FORBIDDEN: ActionResult = {
-  ok: false,
-  message: 'এই কাজটি করার অনুমতি আপনার নেই',
-};
-
-function zodErrors(error: ZodError): Record<string, string> {
-  return Object.fromEntries(
-    error.issues.map((issue) => [String(issue.path[0] ?? '_'), issue.message]),
-  );
-}
+// ক্লায়েন্ট কম্পোনেন্টগুলো `./actions` থেকেই টাইপটি import করে
+export type { ActionResult } from '@/lib/action-result';
 
 /** সিস্টেমে অন্তত একজন সক্রিয় ADMIN থাকতেই হবে */
 async function isLastActiveAdmin(userId: string) {

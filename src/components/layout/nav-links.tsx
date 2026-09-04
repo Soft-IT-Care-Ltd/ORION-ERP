@@ -28,7 +28,9 @@ export function NavLinks({
     <nav className="flex flex-col gap-1">
       {items.map((item) => {
         const Icon = item.icon;
-        const active = pathname === item.href;
+        const active =
+          pathname === item.href ||
+          (item.matchPrefixes?.some((prefix) => pathname.startsWith(prefix)) ?? false);
 
         if (item.upcomingPhase) {
           return (
