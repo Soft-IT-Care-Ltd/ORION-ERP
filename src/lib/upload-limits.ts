@@ -36,3 +36,18 @@ export function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * শুধু ছবি — সাইট ফটো আপলোডে (PRD সেকশন ৫.২) PDF/ডকুমেন্ট নেওয়ার মানে নেই।
+ * উপরের তালিকা থেকেই বের করা হয়, যাতে দুই জায়গায় আলাদা সত্য তৈরি না হয়।
+ */
+export const IMAGE_EXTENSIONS = Object.entries(ALLOWED_UPLOAD_TYPES)
+  .filter(([, mimes]) => mimes.every((mime) => mime.startsWith('image/')))
+  .map(([ext]) => ext);
+
+export const IMAGE_ACCEPT = IMAGE_EXTENSIONS.join(',');
+
+export function isImageFileName(name: string) {
+  const lower = name.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}

@@ -39,6 +39,6 @@ next-env.d.ts
 /prisma/*.db
 /prisma/*.db-journal
 
-# uploads (local file storage — Phase 3 এ R2/S3 এ migrate হবে)
+# uploads (local file storage — পরে R2/S3 এ migrate হবে, lib/upload.ts দেখুন)
 /public/uploads/*
 !/public/uploads/.gitkeep

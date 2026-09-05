@@ -9,7 +9,6 @@ import {
   HardHat,
   Home,
   KanbanSquare,
-  ListChecks,
   Receipt,
   TrendingUp,
   Users,
@@ -45,7 +44,7 @@ export const PANELS: Record<string, Panel> = {
       { label: 'ইউজার ম্যানেজমেন্ট', href: '/admin/users', icon: Users },
       // ADMIN সব লিড দেখে — সেলস প্যানেলের বোর্ডটিই ব্যবহার হয় (ROUTE_ROLES এ অনুমোদিত)
       { label: 'লিড ও পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare },
-      { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2, upcomingPhase: 3 },
+      { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2 },
       { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet, upcomingPhase: 4 },
       { label: 'রিপোর্ট', href: '/admin/reports', icon: BarChart3, upcomingPhase: 6 },
     ],
@@ -70,8 +69,13 @@ export const PANELS: Record<string, Panel> = {
     title: 'সাইট ইঞ্জিনিয়ার প্যানেল',
     items: [
       { label: 'ড্যাশবোর্ড', href: '/engineer', icon: Home },
-      { label: 'আমার সাইট', href: '/engineer/sites', icon: HardHat, upcomingPhase: 3 },
-      { label: 'ফেজ আপডেট', href: '/engineer/updates', icon: ListChecks, upcomingPhase: 3 },
+      // ফেজ আপডেট সাইটের ভেতরেই হয় — তাই আলাদা মেনু নেই
+      {
+        label: 'আমার সাইট',
+        href: '/engineer/sites',
+        icon: HardHat,
+        matchPrefixes: ['/engineer/sites'],
+      },
     ],
   },
   '/accounts': {
@@ -89,7 +93,7 @@ export const PANELS: Record<string, Panel> = {
     title: 'কাস্টমার পোর্টাল',
     items: [
       { label: 'আমার ইউনিট', href: '/customer', icon: Home },
-      { label: 'নির্মাণ অগ্রগতি', href: '/customer/progress', icon: HardHat, upcomingPhase: 5 },
+      { label: 'নির্মাণ অগ্রগতি', href: '/customer/progress', icon: HardHat },
       { label: 'পেমেন্ট', href: '/customer/payments', icon: CreditCard, upcomingPhase: 5 },
       { label: 'ডকুমেন্ট', href: '/customer/documents', icon: FileText, upcomingPhase: 5 },
     ],

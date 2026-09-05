@@ -16,8 +16,8 @@ export default async function AdminDashboard() {
   const stats = [
     { label: 'সক্রিয় ইউজার', value: activeUsers, icon: Users, href: '/admin/users' },
     { label: 'মোট লিড', value: leads, icon: KanbanSquare },
-    { label: 'প্রজেক্ট', value: projects, icon: Building2 },
-    { label: 'ইউনিট', value: units, icon: Wallet },
+    { label: 'প্রজেক্ট', value: projects, icon: Building2, href: '/admin/projects' },
+    { label: 'ইউনিট', value: units, icon: Wallet, href: '/admin/projects' },
   ];
 
   return (
@@ -54,8 +54,8 @@ export default async function AdminDashboard() {
         <CardHeader>
           <CardTitle className="text-base">পরবর্তী ধাপ</CardTitle>
           <CardDescription>
-            Phase 1 সম্পন্ন — role-wise navigation ও ইউজার ম্যানেজমেন্ট কাজ করছে।
-            লিড, প্রজেক্ট ও পেমেন্ট মডিউল Phase 2–4 এ যোগ হবে (<code>02_BUILD_PLAN.md</code>)।
+            Phase 3 সম্পন্ন — প্রজেক্ট/ইউনিট CRUD, ফেজ টেমপ্লেট ও নির্মাণ টাইমলাইন কাজ করছে।
+            পেমেন্ট প্ল্যান ও অ্যাকাউন্টস মডিউল Phase 4 এ যোগ হবে (<code>02_BUILD_PLAN.md</code>)।
           </CardDescription>
         </CardHeader>
       </Card>

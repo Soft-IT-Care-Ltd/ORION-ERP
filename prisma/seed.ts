@@ -7,6 +7,7 @@ import {
   UnitStatus,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { computePhaseStatus, DEFAULT_PHASE_TEMPLATE, planPhaseDates } from '../src/lib/phases';
 
 const prisma = new PrismaClient();
 
@@ -70,12 +71,16 @@ const demoProjects: {
   name: string;
   location: string;
   description: string;
+  /** নির্মাণ শুরুর তারিখ — ফেজের planned date এখান থেকে হিসাব হয় */
+  startDate: Date;
   units: { unitNo: string; sizeSqft: number; price: number; status?: UnitStatus }[];
 }[] = [
   {
     name: 'Orion Green',
     location: 'সোনাডাঙ্গা, খুলনা',
     description: '৮ তলা আবাসিক ভবন — ৩ ও ৪ বেডরুম অ্যাপার্টমেন্ট',
+    // প্রায় দেড় বছর আগে শুরু — কিছু ফেজ শেষ, কিছু পিছিয়ে
+    startDate: daysFromNow(-540),
     units: [
       { unitNo: 'A-1', sizeSqft: 1250, price: 4500000 },
       { unitNo: 'A-2', sizeSqft: 1250, price: 4600000 },
@@ -88,6 +93,7 @@ const demoProjects: {
     name: 'Orion Heights',
     location: 'খালিশপুর, খুলনা',
     description: '১০ তলা আবাসিক ভবন — ডুপ্লেক্স সহ',
+    startDate: daysFromNow(-240),
     units: [
       { unitNo: 'C-1', sizeSqft: 1550, price: 5900000 },
       { unitNo: 'C-2', sizeSqft: 1550, price: 6000000 },
@@ -97,7 +103,7 @@ const demoProjects: {
   },
 ];
 
-async function seedProjects() {
+async function seedProjects(engineerId: string | undefined) {
   const existing = await prisma.project.count();
   if (existing > 0) {
     console.log(`\nℹ ${existing} টি প্রজেক্ট আগে থেকেই আছে — ডেমো প্রজেক্ট স্কিপ করা হলো`);
@@ -111,6 +117,16 @@ async function seedProjects() {
         name: p.name,
         location: p.location,
         description: p.description,
+        startDate: p.startDate,
+        engineerId,
+        // PRD সেকশন ৫.২ এর ডিফল্ট ৮-ফেজ টেমপ্লেট
+        phaseTemplates: {
+          create: DEFAULT_PHASE_TEMPLATE.map((t, index) => ({
+            name: t.name,
+            order: index + 1,
+            defaultDurationDays: t.defaultDurationDays,
+          })),
+        },
         units: {
           create: p.units.map((u) => ({
             unitNo: u.unitNo,
@@ -125,6 +141,130 @@ async function seedProjects() {
   }
 
   console.log(`\n✔ ${demoProjects.length} টি প্রজেক্ট ও ${unitCount} টি ইউনিট তৈরি হয়েছে`);
+}
+
+/**
+ * Phase 3 ডেমো — ফেজ টেমপ্লেট ও টাইমলাইন।
+ *
+ * Phase 2 এর পুরনো ডাটাবেসেও চলে: যে প্রজেক্টে টেমপ্লেট/শুরুর তারিখ/ইঞ্জিনিয়ার
+ * নেই সেখানে ফাঁকা জায়গাগুলো ভরে দেয় (আগের মান কখনো মুছে দেয় না), তারপর যেসব
+ * ইউনিটে এখনো ফেজ নেই সেগুলোতে টাইমলাইন বসিয়ে কিছু অগ্রগতিও দেয় — যাতে
+ * টাইমলাইন খালি না দেখায়। Admin প্যানেলের "টেমপ্লেট প্রয়োগ" বাটনটিও এই কাজই করে।
+ */
+async function seedPhases(engineerId: string | undefined) {
+  const projects = await prisma.project.findMany({
+    select: {
+      id: true,
+      name: true,
+      startDate: true,
+      engineerId: true,
+      _count: { select: { phaseTemplates: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  let backfilled = 0;
+
+  for (const [index, project] of projects.entries()) {
+    const data: { startDate?: Date; engineerId?: string } = {};
+    // পুরনো ডেমো প্রজেক্টে শুরুর তারিখ ছিল না — প্রথমটি দেড় বছর, পরেরগুলো ৮ মাস আগে
+    if (!project.startDate) data.startDate = daysFromNow(index === 0 ? -540 : -240);
+    if (!project.engineerId && engineerId) data.engineerId = engineerId;
+
+    if (Object.keys(data).length > 0) {
+      await prisma.project.update({ where: { id: project.id }, data });
+    }
+
+    if (project._count.phaseTemplates === 0) {
+      await prisma.phaseTemplate.createMany({
+        data: DEFAULT_PHASE_TEMPLATE.map((t, order) => ({
+          projectId: project.id,
+          name: t.name,
+          order: order + 1,
+          defaultDurationDays: t.defaultDurationDays,
+        })),
+      });
+      backfilled += 1;
+    }
+  }
+
+  if (backfilled > 0) {
+    console.log(`\n✔ ${backfilled} টি প্রজেক্টে ডিফল্ট ৮-ফেজ টেমপ্লেট যোগ করা হয়েছে`);
+  }
+
+  const ready = await prisma.project.findMany({
+    select: {
+      id: true,
+      startDate: true,
+      phaseTemplates: {
+        select: { name: true, order: true, defaultDurationDays: true },
+        orderBy: { order: 'asc' },
+      },
+      units: { select: { id: true, _count: { select: { phases: true } } } },
+    },
+  });
+
+  const now = new Date();
+  let created = 0;
+  let skipped = 0;
+
+  for (const project of ready) {
+    if (project.phaseTemplates.length === 0) continue;
+
+    const dates = planPhaseDates(project.phaseTemplates, project.startDate);
+
+    for (const [unitIndex, unit] of project.units.entries()) {
+      if (unit._count.phases > 0) {
+        skipped += 1;
+        continue;
+      }
+
+      // ইউনিটভেদে আলাদা অগ্রগতি — কয়েকটি ফেজ শেষ, একটি চলমান, বাকিগুলো আসন্ন
+      const completed = 2 + (unitIndex % 3);
+
+      for (const [index, template] of project.phaseTemplates.entries()) {
+        const percentComplete = index < completed ? 100 : index === completed ? 50 : 0;
+        const planned = dates[index];
+
+        await prisma.phase.create({
+          data: {
+            unitId: unit.id,
+            name: template.name,
+            order: template.order,
+            plannedStart: planned.plannedStart,
+            plannedEnd: planned.plannedEnd,
+            actualStart: percentComplete > 0 ? planned.plannedStart : null,
+            actualEnd: percentComplete >= 100 ? planned.plannedEnd : null,
+            percentComplete,
+            status: computePhaseStatus({ percentComplete, plannedEnd: planned.plannedEnd }, now),
+          },
+        });
+        created += 1;
+      }
+
+      // চলমান ফেজে একটি ডেমো সাইট আপডেট (ছবি ছাড়া)
+      if (engineerId) {
+        const activePhase = await prisma.phase.findFirst({
+          where: { unitId: unit.id, order: completed + 1 },
+          select: { id: true },
+        });
+        if (activePhase) {
+          await prisma.phaseUpdate.create({
+            data: {
+              phaseId: activePhase.id,
+              updatedById: engineerId,
+              percentComplete: 50,
+              note: 'কাজ চলমান — অর্ধেক সম্পন্ন (ডেমো ডেটা)',
+              photoUrls: [],
+            },
+          });
+        }
+      }
+    }
+  }
+
+  if (created > 0) console.log(`\n✔ ${created} টি ফেজ তৈরি হয়েছে (ডেমো অগ্রগতি সহ)`);
+  else console.log(`\nℹ ${skipped} টি ইউনিটে আগে থেকেই ফেজ আছে — ডেমো ফেজ স্কিপ করা হলো`);
 }
 
 async function seedLeads(assignedToId: string) {
@@ -183,6 +323,7 @@ async function seedLeads(assignedToId: string) {
 async function main() {
   const passwordHash = await bcrypt.hash(password, 10);
   let marketingId: string | undefined;
+  let engineerId: string | undefined;
 
   for (const u of users) {
     const user = await prisma.user.upsert({
@@ -201,11 +342,13 @@ async function main() {
     }
 
     if (u.role === Role.MARKETING) marketingId = user.id;
+    if (u.role === Role.ENGINEER) engineerId = user.id;
 
     console.log(`✔ ${u.role.padEnd(9)} ${u.email}`);
   }
 
-  await seedProjects();
+  await seedProjects(engineerId);
+  await seedPhases(engineerId);
 
   if (marketingId) await seedLeads(marketingId);
 
