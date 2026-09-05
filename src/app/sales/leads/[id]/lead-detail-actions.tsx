@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Pencil } from 'lucide-react';
+import { Loader2, Pencil, Receipt } from 'lucide-react';
 import type { LeadStage } from '@prisma/client';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ import {
   type UnitOption,
 } from '../lead-form-dialog';
 import { LostReasonDialog } from '../lost-reason-dialog';
+import { WonSaleDialog, type SaleUnitOption } from '../won-sale-dialog';
 
 export function LeadDetailActions({
   lead,
@@ -24,22 +25,31 @@ export function LeadDetailActions({
   leadName,
   executives,
   units,
+  saleUnits,
   canAssign,
   canEdit,
+  canConvert,
+  hasSale,
 }: {
   lead: EditableLead;
   stage: LeadStage;
   leadName: string;
   executives: ExecutiveOption[];
   units: UnitOption[];
+  saleUnits: SaleUnitOption[];
   canAssign: boolean;
   canEdit: boolean;
+  /** Won → সেল কনভার্শনের অনুমতি (`lead:convert`) */
+  canConvert: boolean;
+  /** সেল তৈরি হয়ে গেছে — স্টেজ আর বদলানো যাবে না */
+  hasSale: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<LeadStage>(stage);
   const [pending, setPending] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
+  const [wonOpen, setWonOpen] = useState(false);
 
   // server refresh এর পর প্রকৃত স্টেজই দেখাবে
   useEffect(() => setSelected(stage), [stage]);
@@ -68,6 +78,16 @@ export function LeadDetailActions({
       setLostOpen(true);
       return;
     }
+    // PRD সেকশন ৫.১ — Won মানে সেল কনভার্শন (ইউনিট + মূল্য নিশ্চিত করতে হবে)
+    if (next === 'WON') {
+      if (!canConvert) {
+        setSelected(stage);
+        toast.error('Won এ নেওয়ার অনুমতি আপনার নেই');
+        return;
+      }
+      setWonOpen(true);
+      return;
+    }
     void save(next);
   }
 
@@ -83,7 +103,7 @@ export function LeadDetailActions({
           <NativeSelect
             id="detail-stage"
             value={selected}
-            disabled={pending}
+            disabled={pending || hasSale}
             onChange={(event) => onStagePick(event.target.value as LeadStage)}
             className="w-52"
           >
@@ -95,7 +115,18 @@ export function LeadDetailActions({
           </NativeSelect>
           {pending ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
         </div>
+        {hasSale ? (
+          <p className="text-xs text-muted-foreground">সেল তৈরি হয়েছে — স্টেজ পরিবর্তন করা যাবে না</p>
+        ) : null}
       </div>
+
+      {/* Won এ আছে অথচ সেল তৈরি হয়নি (যেমন পুরনো ডেটা) — এখান থেকেই সেরে নেওয়া যায় */}
+      {stage === 'WON' && !hasSale && canConvert ? (
+        <Button onClick={() => setWonOpen(true)}>
+          <Receipt className="mr-2 h-4 w-4" />
+          সেল কনফার্ম করুন
+        </Button>
+      ) : null}
 
       <Button variant="outline" onClick={() => setEditOpen(true)}>
         <Pencil className="mr-2 h-4 w-4" />
@@ -109,6 +140,17 @@ export function LeadDetailActions({
         executives={executives}
         units={units}
         canAssign={canAssign}
+      />
+
+      <WonSaleDialog
+        open={wonOpen}
+        onOpenChange={(open) => {
+          setWonOpen(open);
+          // বাতিল করলে ড্রপডাউন আগের স্টেজে ফিরে যাবে
+          if (!open) setSelected(stage);
+        }}
+        lead={{ id: lead.id, name: leadName, email: lead.email, unitId: lead.unitId }}
+        units={saleUnits}
       />
 
       <LostReasonDialog

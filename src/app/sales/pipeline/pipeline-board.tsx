@@ -25,6 +25,7 @@ import {
   type UnitOption,
 } from '../leads/lead-form-dialog';
 import { LostReasonDialog } from '../leads/lost-reason-dialog';
+import { WonSaleDialog, type SaleUnitOption } from '../leads/won-sale-dialog';
 import { LeadCard, LeadCardPreview } from './lead-card';
 import { PipelineColumn } from './pipeline-column';
 import type { PipelineLead } from './types';
@@ -33,14 +34,19 @@ export function PipelineBoard({
   leads,
   canEdit,
   canAssign,
+  canConvert,
   executives,
   units,
+  saleUnits,
 }: {
   leads: PipelineLead[];
   canEdit: boolean;
   canAssign: boolean;
+  /** Won → সেল কনভার্শনের অনুমতি (`lead:convert`) */
+  canConvert: boolean;
   executives: ExecutiveOption[];
   units: UnitOption[];
+  saleUnits: SaleUnitOption[];
 }) {
   const router = useRouter();
 
@@ -53,6 +59,7 @@ export function PipelineBoard({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditableLead | null>(null);
   const [pendingLost, setPendingLost] = useState<PipelineLead | null>(null);
+  const [pendingWon, setPendingWon] = useState<PipelineLead | null>(null);
 
   const sensors = useSensors(
     // ছোট নড়াচড়া = ক্লিক, তাই ৬px পেরোলে তবেই drag শুরু
@@ -109,9 +116,18 @@ export function PipelineBoard({
         setPendingLost(lead);
         return;
       }
+      // PRD সেকশন ৫.১ — Won মানে সেল কনভার্শন: ইউনিট ও মূল্য নিশ্চিত করে তবেই স্টেজ বদলায়
+      if (stage === 'WON' && !lead.sale) {
+        if (!canConvert) {
+          toast.error('Won এ নেওয়ার অনুমতি আপনার নেই');
+          return;
+        }
+        setPendingWon(lead);
+        return;
+      }
       void applyStageChange(lead, stage);
     },
-    [applyStageChange],
+    [applyStageChange, canConvert],
   );
 
   /** screen-reader announcement এ id নয়, পড়ার মতো নাম দরকার */
@@ -172,8 +188,10 @@ export function PipelineBoard({
                     lead={lead}
                     canEdit={canEdit}
                     pending={savingId === lead.id}
+                    canConvert={canConvert}
                     onEdit={(l) => setEditing(l.editable)}
                     onChangeStage={requestStageChange}
+                    onConfirmSale={setPendingWon}
                   />
                 ))}
               </PipelineColumn>
@@ -198,6 +216,25 @@ export function PipelineBoard({
           const ok = await applyStageChange(pendingLost, 'LOST', reason);
           if (ok) setPendingLost(null);
         }}
+      />
+
+      <WonSaleDialog
+        open={pendingWon !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingWon(null);
+        }}
+        lead={
+          pendingWon
+            ? {
+                id: pendingWon.id,
+                name: pendingWon.name,
+                email: pendingWon.editable.email,
+                unitId: pendingWon.editable.unitId,
+              }
+            : null
+        }
+        units={saleUnits}
+        onConverted={() => setPendingWon(null)}
       />
 
       {editing ? (

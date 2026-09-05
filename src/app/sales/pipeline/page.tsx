@@ -6,7 +6,14 @@ import { can } from '@/lib/rbac';
 import { findAssignableExecutives, leadScope } from '@/lib/lead-access';
 import { LEAD_SOURCES } from '@/lib/leads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { leadCardSelect, startOfToday, toPipelineLead } from '../leads/serialize';
+import {
+  leadCardSelect,
+  startOfToday,
+  toPipelineLead,
+  toSaleUnitOption,
+  toUnitOption,
+  unitOptionSelect,
+} from '../leads/serialize';
 import { NewLeadButton } from './new-lead-button';
 import { PipelineBoard } from './pipeline-board';
 import { PipelineFilter } from './pipeline-filter';
@@ -88,7 +95,7 @@ export default async function PipelinePage({
     prisma.lead.count({ where: leadScope(user) }),
     findAssignableExecutives(),
     prisma.unit.findMany({
-      select: { id: true, unitNo: true, project: { select: { name: true } } },
+      select: unitOptionSelect,
       orderBy: [{ project: { name: 'asc' } }, { unitNo: 'asc' }],
       take: 200,
     }),
@@ -96,7 +103,9 @@ export default async function PipelinePage({
 
   const today = startOfToday();
   const leads = rows.map((row) => toPipelineLead(row, today));
-  const unitOptions = units.map((u) => ({ id: u.id, label: `${u.project.name} — ${u.unitNo}` }));
+  const unitOptions = units.map(toUnitOption);
+  // সেল কনফার্ম ডায়ালগে দাম ও স্ট্যাটাসও লাগে
+  const saleUnits = units.map(toSaleUnitOption);
   const filtered = Boolean(q || source || assignee);
 
   return (
@@ -138,8 +147,10 @@ export default async function PipelinePage({
                 leads={leads}
                 canEdit={canEdit}
                 canAssign={viewAll}
+                canConvert={can(user.role, 'lead:convert')}
                 executives={executives}
                 units={unitOptions}
+                saleUnits={saleUnits}
               />
               <p className="text-xs text-muted-foreground">
                 কার্ডের বাঁ পাশের হ্যান্ডেল ধরে অন্য কলামে টেনে নিলে স্টেজ বদলাবে। মোবাইলে

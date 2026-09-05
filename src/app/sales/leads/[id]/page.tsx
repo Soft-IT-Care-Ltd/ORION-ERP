@@ -14,6 +14,8 @@ import {
   MessageSquare,
   Phone,
   PhoneCall,
+  Receipt,
+  UserRound,
   UserCog,
   Wallet,
 } from 'lucide-react';
@@ -34,10 +36,18 @@ import {
   STAGE_ACCENT,
   STAGE_LABEL,
 } from '@/lib/leads';
+import { SALE_STATUS_BADGE, SALE_STATUS_HINT, SALE_STATUS_LABEL, unitLabel } from '@/lib/sales';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { leadCardSelect, startOfToday, toEditableLead } from '../serialize';
+import {
+  leadCardSelect,
+  startOfToday,
+  toEditableLead,
+  toSaleUnitOption,
+  toUnitOption,
+  unitOptionSelect,
+} from '../serialize';
 import { AddNoteForm } from './add-note-form';
 import { DocumentList } from './document-list';
 import { DocumentUploadForm } from './document-upload-form';
@@ -85,6 +95,17 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
     select: {
       ...leadCardSelect,
       createdAt: true,
+      // কার্ডের চেয়ে বেশি — কাস্টমার কে, কবে সেল হয়েছে
+      sale: {
+        select: {
+          id: true,
+          status: true,
+          totalAmount: true,
+          saleDate: true,
+          unit: { select: { unitNo: true, project: { select: { name: true, location: true } } } },
+          customer: { select: { id: true, user: { select: { name: true, email: true, phone: true } } } },
+        },
+      },
       interestedUnit: {
         select: {
           id: true,
@@ -126,7 +147,7 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
   const executives = canEdit ? await findAssignableExecutives() : [];
   const units = canEdit
     ? await prisma.unit.findMany({
-        select: { id: true, unitNo: true, project: { select: { name: true } } },
+        select: unitOptionSelect,
         orderBy: [{ project: { name: 'asc' } }, { unitNo: 'asc' }],
         take: 200,
       })
@@ -173,12 +194,12 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
           stage={lead.stage}
           leadName={lead.name}
           executives={executives}
-          units={units.map((u) => ({
-            id: u.id,
-            label: `${u.project.name} — ${u.unitNo}`,
-          }))}
+          units={units.map(toUnitOption)}
+          saleUnits={units.map(toSaleUnitOption)}
           canAssign={viewAll}
           canEdit={canEdit}
+          canConvert={can(user.role, 'lead:convert')}
+          hasSale={lead.sale !== null}
         />
       </div>
 
@@ -186,6 +207,49 @@ export default async function LeadDetailPage({ params }: { params: { id: string 
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <span className="font-medium">Lost</span> — {lostReasonLabel(lead.lostReason)}
         </div>
+      ) : null}
+
+      {/* PRD সেকশন ৫.১ — Won এ কনভার্ট হওয়া সেলের সারাংশ */}
+      {lead.sale ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+              সেল
+              <span
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-xs font-medium',
+                  SALE_STATUS_BADGE[lead.sale.status],
+                )}
+              >
+                {SALE_STATUS_LABEL[lead.sale.status]}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {SALE_STATUS_HINT[lead.sale.status]}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <InfoRow icon={Building2} label="ইউনিট">
+              {unitLabel(lead.sale.unit)}
+              <span className="block text-xs text-muted-foreground">
+                {lead.sale.unit.project.location}
+              </span>
+            </InfoRow>
+            <InfoRow icon={Wallet} label="মোট মূল্য">
+              <span className="font-medium">{formatBDT(Number(lead.sale.totalAmount))}</span>
+            </InfoRow>
+            <InfoRow icon={UserRound} label="কাস্টমার">
+              {lead.sale.customer.user.name}
+              <span className="block break-all text-xs text-muted-foreground">
+                {lead.sale.customer.user.email}
+              </span>
+            </InfoRow>
+            <InfoRow icon={CalendarClock} label="সেলের তারিখ">
+              {format(lead.sale.saleDate, 'dd MMM yyyy')}
+            </InfoRow>
+          </CardContent>
+        </Card>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">

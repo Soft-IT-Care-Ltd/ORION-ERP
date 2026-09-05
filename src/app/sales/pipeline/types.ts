@@ -1,4 +1,4 @@
-import type { LeadStage } from '@prisma/client';
+import type { LeadStage, SaleStatus } from '@prisma/client';
 import type { FollowUpTone } from '@/lib/leads';
 import type { EditableLead } from '../leads/lead-form-dialog';
 
@@ -25,6 +25,8 @@ export type PipelineLead = {
   residence: { flag: string; label: string } | null;
   /** সংযুক্ত ফাইলের সংখ্যা — ০ হলে কার্ডে আইকন দেখানো হয় না */
   documentCount: number;
+  /** Won এ কনভার্ট হয়ে সেল তৈরি হলে — নইলে null (কার্ডে "সেল কনফার্ম" অপশন দেখায়) */
+  sale: { status: SaleStatus; unitLabel: string; amountLabel: string } | null;
   /** এডিট ডায়ালগ যেন আবার ফেচ ছাড়াই খুলতে পারে */
   editable: EditableLead;
 };

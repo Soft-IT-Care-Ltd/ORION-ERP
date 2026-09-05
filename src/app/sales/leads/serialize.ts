@@ -1,11 +1,13 @@
 import { format } from 'date-fns';
 import type { Prisma } from '@prisma/client';
 import { budgetLabel, followUpTone, SOURCE_LABEL } from '@/lib/leads';
+import { unitLabel } from '@/lib/sales';
 import { countryFlag, countryLabel, DEFAULT_PHONE_COUNTRY } from '@/lib/countries';
 import { formatPhoneInternational, splitPhone } from '@/lib/phone';
 import { formatBDT } from '@/lib/utils';
 import type { PipelineLead } from '../pipeline/types';
-import type { EditableLead } from './lead-form-dialog';
+import type { EditableLead, UnitOption } from './lead-form-dialog';
+import type { SaleUnitOption } from './won-sale-dialog';
 
 /**
  * বোর্ড ও ডিটেইল পেজ — দুই জায়গায় একই select ব্যবহার হয়, যাতে কার্ডের
@@ -31,6 +33,15 @@ export const leadCardSelect = {
   localContactRelation: true,
   assignedTo: { select: { id: true, name: true } },
   _count: { select: { documents: true } },
+  // Won এ কনভার্ট হয়েছে কিনা — কার্ডে ব্যাজ, আর স্টেজ মেনুর সিদ্ধান্ত এর উপর
+  sale: {
+    select: {
+      id: true,
+      status: true,
+      totalAmount: true,
+      unit: { select: { unitNo: true, project: { select: { name: true } } } },
+    },
+  },
 } satisfies Prisma.LeadSelect;
 
 export type LeadCardRow = Prisma.LeadGetPayload<{ select: typeof leadCardSelect }>;
@@ -84,6 +95,13 @@ export function toPipelineLead(lead: LeadCardRow, today: Date): PipelineLead {
       ? { flag: countryFlag(lead.residenceCountry), label: residenceLabel }
       : null,
     documentCount: lead._count.documents,
+    sale: lead.sale
+      ? {
+          status: lead.sale.status,
+          unitLabel: unitLabel(lead.sale.unit),
+          amountLabel: formatBDT(Number(lead.sale.totalAmount)),
+        }
+      : null,
     editable: toEditableLead(lead),
   };
 }
@@ -92,4 +110,39 @@ export function toPipelineLead(lead: LeadCardRow, today: Date): PipelineLead {
 export function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+/* ------------------------------------------------------------------- units */
+
+/**
+ * ইউনিট ড্রপডাউন — লিড ফর্মে (শুধু নাম) ও সেল কনফার্ম ডায়ালগে (দাম, স্ট্যাটাস,
+ * আগে বিক্রি হয়ে গেছে কিনা) — দুই জায়গায় একই সারি ব্যবহৃত হয়।
+ */
+export const unitOptionSelect = {
+  id: true,
+  unitNo: true,
+  price: true,
+  status: true,
+  project: { select: { name: true } },
+  sale: { select: { id: true } },
+} satisfies Prisma.UnitSelect;
+
+export type UnitOptionRow = Prisma.UnitGetPayload<{ select: typeof unitOptionSelect }>;
+
+export function toUnitOption(unit: UnitOptionRow): UnitOption {
+  return { id: unit.id, label: unitLabel(unit) };
+}
+
+export function toSaleUnitOption(unit: UnitOptionRow): SaleUnitOption {
+  const price = Number(unit.price);
+  return {
+    id: unit.id,
+    projectName: unit.project.name,
+    unitNo: unit.unitNo,
+    price: String(price),
+    priceLabel: formatBDT(price),
+    status: unit.status,
+    // Sale.unitId unique — একটি ইউনিট একবারই বিক্রি হতে পারে
+    taken: unit.sale !== null || unit.status === 'SOLD',
+  };
 }

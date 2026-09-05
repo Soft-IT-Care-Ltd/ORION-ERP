@@ -5,7 +5,8 @@ Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui + Prisma + PostgreSQ
 স্পেসিফিকেশন: [`01_PRD.md`](01_PRD.md) · প্ল্যান: [`02_BUILD_PLAN.md`](02_BUILD_PLAN.md) · স্কিমা: [`03_schema.prisma`](03_schema.prisma) · Claude Code instructions: [`CLAUDE.md`](CLAUDE.md)
 
 **বর্তমান অবস্থা: Phase 2 (Lead Management & Sales Pipeline) সম্পন্ন** — প্রবাসী-কেন্দ্রিক
-লিড ফিল্ড (international ফোন, residence country, লোকাল কন্টাক্ট) ও Lead Documents সহ।
+লিড ফিল্ড (international ফোন, residence country, লোকাল কন্টাক্ট), Lead Documents, ও
+**Won → Sale কনভার্শন** (ইউনিট সিলেক্ট করে ড্রাফট সেল তৈরি) সহ।
 
 ---
 
@@ -115,7 +116,7 @@ npm run dev
 prisma/
 ├── schema.prisma          # 03_schema.prisma এর কপি (দুটো sync রাখুন)
 ├── migrations/
-└── seed.ts                # প্রতি role এ একজন ডেমো ইউজার
+└── seed.ts                # প্রতি role এ একজন ডেমো ইউজার + ডেমো লিড/প্রজেক্ট/ইউনিট
 src/
 ├── app/
 │   ├── (auth)/login/      # লগইন পেজ + ফর্ম
@@ -125,6 +126,7 @@ src/
 │   │   ├── page.tsx       # ফানেল ড্যাশবোর্ড (stage-wise count, scope অনুযায়ী)
 │   │   ├── pipeline/      # Kanban বোর্ড (dnd-kit drag & drop)
 │   │   └── leads/         # lead server actions, ফর্ম, detail + timeline + ডকুমেন্ট
+│   │                      # + sale-actions.ts / won-sale-dialog.tsx (Won → Sale)
 │   ├── engineer/          # ENGINEER
 │   ├── accounts/          # ACCOUNTS
 │   ├── customer/          # CUSTOMER
@@ -147,6 +149,7 @@ src/
 │   ├── guards.ts          # server action এর permission গার্ড
 │   ├── action-result.ts   # server action এর common return shape
 │   ├── leads.ts           # stage/source/lost-reason কনস্ট্যান্ট ও লেবেল
+│   ├── sales.ts           # sale status / unit status লেবেল ও ব্যাজ
 │   ├── lead-access.ts     # লিড ownership scope (ADMIN সব / MARKETING নিজের)
 │   ├── activity-log.ts    # audit trail helper
 │   ├── notifications.ts
@@ -205,7 +208,14 @@ npx shadcn@2.10.0 add dialog select textarea
 
 Phase 3 — Project, Unit & Phase Timeline। প্রম্পট: `04_PROMPTS.md` এর Phase 3 সেকশন।
 
-Phase 2 এর যে কাজটি Phase 3 এ গড়াবে: লিড **Won** এ গেলে PRD সেকশন ৫.১ অনুযায়ী
-Project + Customer + Payment Schedule ড্রাফট অটো-তৈরি (এখন শুধু টাইমলাইনে নোট পড়ে)।
+**Won → Sale কনভার্শন (কাজ করছে):** লিড Won এ নিলে একটি ডায়ালগ খোলে — ইউনিট ও
+চূড়ান্ত মূল্য নিশ্চিত করলে এক ট্রানজেকশনে Customer (না থাকলে নতুন `role=CUSTOMER`
+ইউজার, নাম-ফোন লিড থেকে), Sale (`status=DRAFT`) ও Unit → `SOLD` হয়। সেল কনফার্ম না
+হওয়া পর্যন্ত লিডের স্টেজ আর ফেরানো যায় না। প্রজেক্ট/ইউনিট CRUD Phase 3 এ আসবে —
+আপাতত `prisma/seed.ts` এ ২টি ডেমো প্রজেক্ট ও ৯টি ইউনিট আছে।
+
+**Phase 4 এ গড়াবে:** ড্রাফট সেলের PaymentPlan সেট করে Accounts/Admin এর কনফার্মেশন
+(`Sale.status` → `CONFIRMED`)। কনভার্শনের সময় Accounts ও Admin কে ইতিমধ্যে
+`SALE_DRAFT_CREATED` নোটিফিকেশন পাঠানো হয়।
 
 সাইডবারে **P3 / P4 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।

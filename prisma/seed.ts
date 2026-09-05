@@ -1,4 +1,11 @@
-import { LeadActivityType, LeadSource, LeadStage, PrismaClient, Role } from '@prisma/client';
+import {
+  LeadActivityType,
+  LeadSource,
+  LeadStage,
+  PrismaClient,
+  Role,
+  UnitStatus,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -54,6 +61,71 @@ const demoLeads: {
   { name: 'জাহিদ হাসান', phone: '+96550123511', residenceCountry: 'KW', source: LeadSource.COLD_CALL, stage: LeadStage.LOST, budgetMin: 3000000, lostReason: 'Price too high' },
   { name: 'মিতু রহমান', phone: '+8801711111112', residenceCountry: 'BD', source: LeadSource.FACEBOOK_ADS, stage: LeadStage.LOST, lostReason: 'No response' },
 ];
+
+/**
+ * ডেমো প্রজেক্ট ও ইউনিট — Won → Sale কনভার্শনে ইউনিট বেছে নেওয়া লাগে।
+ * পূর্ণ প্রজেক্ট/ইউনিট মডিউল Phase 3 এ আসবে (02_BUILD_PLAN.md)।
+ */
+const demoProjects: {
+  name: string;
+  location: string;
+  description: string;
+  units: { unitNo: string; sizeSqft: number; price: number; status?: UnitStatus }[];
+}[] = [
+  {
+    name: 'Orion Green',
+    location: 'সোনাডাঙ্গা, খুলনা',
+    description: '৮ তলা আবাসিক ভবন — ৩ ও ৪ বেডরুম অ্যাপার্টমেন্ট',
+    units: [
+      { unitNo: 'A-1', sizeSqft: 1250, price: 4500000 },
+      { unitNo: 'A-2', sizeSqft: 1250, price: 4600000 },
+      { unitNo: 'A-3', sizeSqft: 1450, price: 5400000 },
+      { unitNo: 'A-4', sizeSqft: 1450, price: 5500000, status: UnitStatus.BOOKED },
+      { unitNo: 'B-4', sizeSqft: 1650, price: 6300000 },
+    ],
+  },
+  {
+    name: 'Orion Heights',
+    location: 'খালিশপুর, খুলনা',
+    description: '১০ তলা আবাসিক ভবন — ডুপ্লেক্স সহ',
+    units: [
+      { unitNo: 'C-1', sizeSqft: 1550, price: 5900000 },
+      { unitNo: 'C-2', sizeSqft: 1550, price: 6000000 },
+      { unitNo: 'C-3', sizeSqft: 2100, price: 8200000, status: UnitStatus.ON_HOLD },
+      { unitNo: 'D-1', sizeSqft: 2400, price: 9500000 },
+    ],
+  },
+];
+
+async function seedProjects() {
+  const existing = await prisma.project.count();
+  if (existing > 0) {
+    console.log(`\nℹ ${existing} টি প্রজেক্ট আগে থেকেই আছে — ডেমো প্রজেক্ট স্কিপ করা হলো`);
+    return;
+  }
+
+  let unitCount = 0;
+  for (const p of demoProjects) {
+    await prisma.project.create({
+      data: {
+        name: p.name,
+        location: p.location,
+        description: p.description,
+        units: {
+          create: p.units.map((u) => ({
+            unitNo: u.unitNo,
+            sizeSqft: u.sizeSqft,
+            price: u.price,
+            status: u.status ?? UnitStatus.AVAILABLE,
+          })),
+        },
+      },
+    });
+    unitCount += p.units.length;
+  }
+
+  console.log(`\n✔ ${demoProjects.length} টি প্রজেক্ট ও ${unitCount} টি ইউনিট তৈরি হয়েছে`);
+}
 
 async function seedLeads(assignedToId: string) {
   const existing = await prisma.lead.count();
@@ -132,6 +204,8 @@ async function main() {
 
     console.log(`✔ ${u.role.padEnd(9)} ${u.email}`);
   }
+
+  await seedProjects();
 
   if (marketingId) await seedLeads(marketingId);
 

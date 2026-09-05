@@ -354,12 +354,37 @@ export async function changeLeadStage(input: {
 
   const existing = await prisma.lead.findFirst({
     where: { id, ...leadScope(actor) },
-    select: { id: true, name: true, stage: true, assignedToId: true },
+    select: {
+      id: true,
+      name: true,
+      stage: true,
+      assignedToId: true,
+      sale: { select: { id: true } },
+    },
   });
   if (!existing) return NOT_FOUND;
 
   if (existing.stage === stage && stage !== LeadStage.LOST) {
     return { ok: true, message: 'স্টেজ অপরিবর্তিত' };
+  }
+
+  // PRD সেকশন ৫.১ — Won এ যাওয়া মানে ইউনিট সহ সেল তৈরি হওয়া। UI ডায়ালগ খুলে
+  // `convertLeadToSale` ডাকে; সরাসরি এখানে এলে স্টেজ বদলে সেল বাদ পড়ে যেত।
+  if (stage === LeadStage.WON && !existing.sale) {
+    return {
+      ok: false,
+      message: 'Won এ নিতে হলে ইউনিট নির্বাচন করে সেল কনফার্ম করুন',
+      fieldErrors: { stage: 'সেল কনফার্ম করা প্রয়োজন' },
+    };
+  }
+
+  // সেল তৈরি হয়ে গেলে লিড আর পাইপলাইনে ফেরত যাবে না — ইউনিট SOLD, কাস্টমার তৈরি।
+  // ফেরাতে হলে আগে সেলটি বাতিল করতে হবে (Phase 4 — Accounts/Admin)।
+  if (existing.stage === LeadStage.WON && existing.sale && stage !== LeadStage.WON) {
+    return {
+      ok: false,
+      message: 'সেল তৈরি হয়ে গেছে — স্টেজ ফেরাতে হলে আগে সেলটি বাতিল করতে হবে',
+    };
   }
 
   // LOST থেকে বেরোলে পুরনো কারণ আর প্রযোজ্য নয়
@@ -385,18 +410,6 @@ export async function changeLeadStage(input: {
           createdById: actor.id,
         },
       });
-
-      // PRD সেকশন ৫.১ — "Won" এ Project/Customer/Payment plan অটো-তৈরি Phase 3 এ
-      if (stage === LeadStage.WON) {
-        await tx.leadActivity.create({
-          data: {
-            leadId: id,
-            type: LeadActivityType.NOTE,
-            note: 'Won — প্রজেক্ট/পেমেন্ট প্ল্যান তৈরি বাকি (Phase 3 এ অটোমেটিক হবে)',
-            createdById: actor.id,
-          },
-        });
-      }
     });
 
     await logActivity({

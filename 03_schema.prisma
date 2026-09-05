@@ -55,6 +55,11 @@ enum UnitStatus {
   ON_HOLD
 }
 
+enum SaleStatus {
+  DRAFT      // Lead "Won" থেকে অটো-তৈরি — PaymentPlan এখনো সেট হয়নি
+  CONFIRMED  // Accounts/Admin পেমেন্ট প্ল্যান দিয়ে কনফার্ম করেছে (Phase 4)
+}
+
 enum InstallmentStatus {
   SCHEDULED
   PAID
@@ -214,9 +219,16 @@ model Sale {
   customerId    String
   totalAmount   Decimal
   saleDate      DateTime     @default(now())
+  // Won → sale কনভার্শন draft অবস্থায় তৈরি হয়; Accounts/Admin পেমেন্ট প্ল্যান
+  // সেট করে কনফার্ম করলে CONFIRMED হবে (PRD সেকশন ৫.১ — "draft mode")
+  status        SaleStatus   @default(DRAFT)
+  createdAt     DateTime     @default(now())
 
   paymentPlan   PaymentPlan?
   documents     Document[]
+
+  // Accounts এর "পেমেন্ট প্ল্যান বাকি" তালিকার জন্য
+  @@index([status, saleDate])
 }
 
 model PaymentPlan {
