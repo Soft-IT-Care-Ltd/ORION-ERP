@@ -31,6 +31,10 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   '/engineer': ['ADMIN', 'ENGINEER'],
   '/accounts': ['ADMIN', 'ACCOUNTS'],
   '/customer': ['CUSTOMER'],
+  // পেমেন্ট রসিদ কোনো একটি প্যানেলের নয় — Accounts যেটি তৈরি করে, Customer সেটিই
+  // ডাউনলোড করেন (PRD সেকশন ৫.৩ ও ৫.৪)। রসিদটি নিজের কি না, সেই ownership যাচাই
+  // পেজেই হয় (`app/receipts/[paymentId]/page.tsx`)।
+  '/receipts': ['ADMIN', 'ACCOUNTS', 'CUSTOMER'],
 };
 
 /** সব permission key — PRD সেকশন ৪ এর row গুলোর কোড-রূপ */

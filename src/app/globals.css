@@ -90,3 +90,43 @@
       sans-serif;
   }
 }
+
+/*
+ * প্রিন্ট / PDF — PRD সেকশন ৫.৩ (auto invoice/receipt generate)।
+ *
+ * আলাদা PDF লাইব্রেরি ব্যবহার না করে ব্রাউজারের নিজস্ব "Print → Save as PDF"
+ * ব্যবহার করা হয়েছে: jsPDF/pdf-lib এর বিল্ট-ইন ফন্টে বাংলা গ্লিফ নেই, ফলে
+ * কাস্টমারের নাম/লেবেল ভেঙে যেত। ব্রাউজার প্রিন্ট পাইপলাইন Noto Sans Bengali
+ * সহ পুরো ফন্ট স্ট্যাক পায়, তাই রসিদ হুবহু ঠিকভাবে ছাপে।
+ */
+@media print {
+  /* স্ক্রিন-only উপাদান (বোতাম, নেভিগেশন) কাগজে যাবে না */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* কাগজে সাদা ব্যাকগ্রাউন্ড ও কালো লেখা — টোনার বাঁচে, ফটোকপিও পরিষ্কার হয় */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-sheet {
+    margin: 0 !important;
+    max-width: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  /* রঙিন ব্যাজ/বর্ডার প্রিন্টেও যেন থাকে */
+  .print-keep-color {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

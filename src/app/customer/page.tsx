@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { HardHat } from 'lucide-react';
+import { CreditCard, HardHat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -31,11 +31,28 @@ export default function Page() {
       </Card>
 
       <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">পেমেন্ট</CardTitle>
+          <CardDescription>
+            আপনার কিস্তির তালিকা, কোনটি পরিশোধিত/বকেয়া, এবং প্রতিটি পেমেন্টের রসিদ দেখুন।
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href="/customer/payments">
+              <CreditCard className="mr-2 h-4 w-4" />
+              পেমেন্ট দেখুন
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">Phase 5 এ আসছে</CardTitle>
           <CardDescription>
-            সাইডবারে <span className="font-medium">P5</span> চিহ্নিত মেনুগুলো (পেমেন্ট, ডকুমেন্ট)
-            ওই ফেজে চালু হবে — বিস্তারিত <code>02_BUILD_PLAN.md</code> এ।
+            সাইডবারে <span className="font-medium">P5</span> চিহ্নিত মেনু (ডকুমেন্ট) ওই ফেজে চালু
+            হবে — বিস্তারিত <code>02_BUILD_PLAN.md</code> এ।
           </CardDescription>
         </CardHeader>
       </Card>

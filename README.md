@@ -62,7 +62,9 @@ cp .env.example .env
 openssl rand -base64 32
 ```
 
-আউটপুটটি `NEXTAUTH_SECRET` এ বসান।
+আউটপুটটি `NEXTAUTH_SECRET` এ বসান। প্রোডাকশনে আরেকটি সিক্রেট বানিয়ে `CRON_SECRET` এ
+বসান — ওভারডিউ ডিটেকশন cron (`/api/cron/overdue`) এটি দিয়েই সুরক্ষিত হয়। লোকাল dev এ
+খালি রাখলেও চলে।
 
 ### ধাপ ৪ — মাইগ্রেশন ও সিড
 
@@ -127,9 +129,15 @@ src/
 │   │   ├── pipeline/      # Kanban বোর্ড (dnd-kit drag & drop)
 │   │   └── leads/         # lead server actions, ফর্ম, detail + timeline + ডকুমেন্ট
 │   │                      # + sale-actions.ts / won-sale-dialog.tsx (Won → Sale)
-│   ├── engineer/          # ENGINEER
+│   ├── engineer/          # ENGINEER — আমার সাইট, ফেজ আপডেট
 │   ├── accounts/          # ACCOUNTS
-│   ├── customer/          # CUSTOMER
+│   │   ├── page.tsx       # কালেকশন KPI + aging রিপোর্ট
+│   │   ├── schedule/      # সেল তালিকা + [saleId] প্ল্যান বিল্ডার ও শিডিউল
+│   │   ├── payments/      # পেমেন্ট এন্ট্রি ডায়ালগ, সাম্প্রতিক রসিদ, sweep বোতাম
+│   │   └── overdue/       # পূর্ণ aging রিপোর্ট (০–১৫ / ১৬–৩০ / ৩০+)
+│   ├── customer/          # CUSTOMER — progress ও payments (read-only)
+│   ├── receipts/[id]/     # প্রিন্টযোগ্য রসিদ (Admin/Accounts/নিজের কাস্টমার)
+│   ├── api/cron/overdue/  # ওভারডিউ sweep — cron বা on-demand
 │   └── api/auth/[...nextauth]/
 ├── components/
 │   ├── ui/                # shadcn/ui
@@ -150,7 +158,11 @@ src/
 │   ├── action-result.ts   # server action এর common return shape
 │   ├── leads.ts           # stage/source/lost-reason কনস্ট্যান্ট ও লেবেল
 │   ├── sales.ts           # sale status / unit status লেবেল ও ব্যাজ
+│   ├── phases.ts          # ফেজ টেমপ্লেট, স্ট্যাটাস হিসাব ও লেবেল (client-safe)
+│   ├── payments.ts        # কিস্তি টেমপ্লেট, স্ট্যাটাস, aging, রসিদ (client-safe)
+│   ├── payment-data.ts    # প্ল্যান লোড, ওভারডিউ sweep, aging কুয়েরি (server-only)
 │   ├── lead-access.ts     # লিড ownership scope (ADMIN সব / MARKETING নিজের)
+│   ├── project-access.ts  # প্রজেক্ট/ইউনিট scope (ENGINEER শুধু assigned)
 │   ├── activity-log.ts    # audit trail helper
 │   ├── notifications.ts
 │   ├── utils.ts
@@ -196,6 +208,56 @@ src/
 
 > **নোট:** role বদলালে ইউজারের JWT তে পুরনো role থেকে যায়। `PanelShell` DB এর role অনুযায়ী তাকে সঠিক প্যানেলে পাঠায়, তবে সাইডবার/নেভিগেশন পুরোপুরি আপডেট হতে তাকে **আবার লগইন** করতে হবে।
 
+## ৫খ. পেমেন্ট মডিউল (Phase 4 — PRD সেকশন ৫.৩)
+
+**প্ল্যান বিল্ডার** (`/accounts/schedule/[saleId]`) — দুইভাবে শিডিউল বানানো যায়:
+
+- **টেমপ্লেট** — PRD এর স্যাম্পল প্ল্যান (Booking ৫%, Down payment ১৫%, Agreement ১০%,
+  ২০টি মাসিক কিস্তি প্রতিটি ২.৫%, হ্যান্ডওভারে বাকিটা)। প্রতিটি হার ও তারিখ এডিটযোগ্য,
+  আর নিচে লাইভ প্রিভিউ দেখায় ঠিক কী তৈরি হবে।
+- **কাস্টম কিস্তি** — হাতে সারি যোগ/এডিট/মুছে ফেলা (label, due date, amount)।
+
+> **PRD এর টেবিল সম্পর্কে:** সেখানকার শতাংশ যোগ করলে ৯০% হয় (5+15+10+50+10)। তাই
+> হ্যান্ডওভারের কিস্তিটি **অবশিষ্ট** ধরা হয় — যোগফল সবসময় ঠিক সেল ভ্যালুর সমান থাকে,
+> রাউন্ডিংয়ের খুচরো টাকাও হারায় না। ডিফল্ট মানে হ্যান্ডওভারে পড়ে ২০%; হার বদলে ১০%ও
+> করা যায় (যেমন মাসিক ৩%)।
+
+প্ল্যান সেট হলে ড্রাফট সেলটি **CONFIRMED** হয় (PRD সেকশন ৫.১)।
+
+**শিডিউল টেবিল** (`components/payment-schedule/`) — রঙ-কোডেড: পরিশোধিত=সবুজ,
+আংশিক=হলুদ, বকেয়া=লাল, নির্ধারিত=ধূসর। `PhaseTimeline` এর মতোই Admin, Accounts ও
+Customer — তিন প্যানেলেই একই কম্পোনেন্ট; এডিটের বোতাম আসে `actions` prop দিয়ে, তাই
+Customer এর কাছে এটি সম্পূর্ণ read-only। মোবাইলে কার্ড, md থেকে টেবিল।
+
+**পেমেন্ট এন্ট্রি** (`/accounts/payments`) — কিস্তি বেছে প্রাপ্ত টাকা, মাধ্যম
+(Cash/Bank/bKash/Nagad/Cheque), রেফারেন্স ও রসিদ নম্বর দিলে Payment তৈরি হয়, কিস্তির
+স্ট্যাটাস নতুন করে হিসাব হয় এবং প্রিন্টযোগ্য রসিদ (`/receipts/[id]`) খোলা যায়।
+
+- রসিদ নম্বর খালি রাখলে বছরভিত্তিক ক্রমিক — `ORB-2026-000123`
+- বাকির চেয়ে বেশি টাকা এক কিস্তিতে নেওয়া যায় না (অগ্রিম হলে পরের কিস্তিতে আলাদা এন্ট্রি)
+- টাকা জমা পড়া কিস্তি আর মোছা যায় না — বিল্ডারে তালা দেওয়া থাকে, server ও একই নিয়ম মানে
+- PDF আলাদা লাইব্রেরি দিয়ে নয়, ব্রাউজারের **Print → Save as PDF** — jsPDF/pdf-lib এর
+  বিল্ট-ইন ফন্টে বাংলা গ্লিফ নেই, কাস্টমারের নাম ভেঙে যেত
+
+**ওভারডিউ ডিটেকশন ও aging** — `markOverdueInstallments()` due date পেরোনো অথচ অপরিশোধিত
+কিস্তিকে `OVERDUE` লেখে (তারিখ পিছিয়ে দিলে বা টাকা এলে আবার ঠিকও করে)। চলে তিনভাবে:
+cron (`/api/cron/overdue`, `CRON_SECRET` বেয়ারার টোকেন), অ্যাকাউন্টসের প্রতিটি পেজ লোডে,
+আর "ওভারডিউ যাচাই" বোতামে। Aging রিপোর্ট ০–১৫ / ১৬–৩০ / ৩০+ দিনে ভাগ করে অনাদায়ী অঙ্ক,
+কিস্তি সংখ্যা ও অ্যাকাউন্ট সংখ্যা দেখায় (`/accounts/overdue`, ড্যাশবোর্ড, `/admin/payments`)।
+
+```bash
+# রোজ রাত ১টায়
+0 1 * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/overdue
+```
+
+> `Installment.status` DB তে একটি **স্ন্যাপশট** (aging কুয়েরি ইনডেক্স ব্যবহার করতে পারে
+> বলে)। দেখানোর সময় UI সবসময় আজকের তারিখ ধরে `computeInstallmentStatus()` দিয়ে আবার
+> হিসাব করে — `lib/phases.ts` এর ফেজ স্ট্যাটাসের মতোই। লেখা আর পড়া, দুই জায়গায় একই
+> ফাংশন, তাই cron না চললেও UI ভুল দেখায় না।
+
+প্রতিটি পেমেন্ট ও প্ল্যান পরিবর্তন `ActivityLog` এ যায় (`PAYMENT_RECEIVED`,
+`PAYMENT_PLAN_GENERATED`, `PAYMENT_PLAN_SAVED`, `OVERDUE_SWEEP`) — CLAUDE.md নিয়ম ৪।
+
 ## ৬. নতুন shadcn/ui কম্পোনেন্ট যোগ
 
 ```bash
@@ -206,16 +268,11 @@ npx shadcn@2.10.0 add dialog select textarea
 
 ## ৭. পরবর্তী ধাপ
 
-Phase 3 — Project, Unit & Phase Timeline। প্রম্পট: `04_PROMPTS.md` এর Phase 3 সেকশন।
+Phase 5 — Customer Portal (ডকুমেন্ট ও সাপোর্ট টিকিট)। প্রম্পট: `04_PROMPTS.md` এর
+Phase 5 সেকশন।
 
-**Won → Sale কনভার্শন (কাজ করছে):** লিড Won এ নিলে একটি ডায়ালগ খোলে — ইউনিট ও
-চূড়ান্ত মূল্য নিশ্চিত করলে এক ট্রানজেকশনে Customer (না থাকলে নতুন `role=CUSTOMER`
-ইউজার, নাম-ফোন লিড থেকে), Sale (`status=DRAFT`) ও Unit → `SOLD` হয়। সেল কনফার্ম না
-হওয়া পর্যন্ত লিডের স্টেজ আর ফেরানো যায় না। প্রজেক্ট/ইউনিট CRUD Phase 3 এ আসবে —
-আপাতত `prisma/seed.ts` এ ২টি ডেমো প্রজেক্ট ও ৯টি ইউনিট আছে।
+কাস্টমার পোর্টালের **progress** ও **payments** পাতা দুটি ইতিমধ্যে চালু — নিজের ইউনিটের
+ফেজ টাইমলাইন, ছবি, কিস্তির তালিকা ও রসিদ (সব read-only)। Phase 5 এ যোগ হবে ডকুমেন্ট
+রিপোজিটরি ও সাপোর্ট টিকিট।
 
-**Phase 4 এ গড়াবে:** ড্রাফট সেলের PaymentPlan সেট করে Accounts/Admin এর কনফার্মেশন
-(`Sale.status` → `CONFIRMED`)। কনভার্শনের সময় Accounts ও Admin কে ইতিমধ্যে
-`SALE_DRAFT_CREATED` নোটিফিকেশন পাঠানো হয়।
-
-সাইডবারে **P3 / P4 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।
+সাইডবারে **P5 / P6** ব্যাজ দেওয়া মেনুগুলো ওই ফেজে চালু হবে।

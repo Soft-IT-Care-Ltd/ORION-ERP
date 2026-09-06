@@ -249,20 +249,32 @@ model PaymentPlan {
   sale          Sale          @relation(fields: [saleId], references: [id])
   saleId        String        @unique
   createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt
 
   installments  Installment[]
 }
 
 model Installment {
   id             String             @id @default(cuid())
-  paymentPlan    PaymentPlan        @relation(fields: [paymentPlanId], references: [id])
+  paymentPlan    PaymentPlan        @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
   paymentPlanId  String
   label          String             // e.g. "Booking Money", "Installment 1/20"
+  // শিডিউলে দেখানোর ক্রম — একই দিনে একাধিক কিস্তি থাকলে dueDate দিয়ে সাজানো যেত না
+  order          Int                @default(0)
   dueDate        DateTime
   amount         Decimal
+  // টেমপ্লেট থেকে তৈরি হলে মোট মূল্যের শতকরা হার (PRD সেকশন ৫.৩ টেবিলের "%" কলাম)
+  percentage     Decimal?
+  // `payments` যোগফল + dueDate থেকে হিসাব করে লেখা হয় (lib/payments.ts) —
+  // কুয়েরি/aging রিপোর্টের সুবিধার্থে; UI সবসময় আজকের তারিখ ধরে আবার হিসাব করে নেয়
   status         InstallmentStatus  @default(SCHEDULED)
 
   payments       Payment[]
+
+  @@index([paymentPlanId, order])
+  // ওভারডিউ sweep ও aging রিপোর্টের কুয়েরি
+  @@index([status, dueDate])
+  @@index([dueDate])
 }
 
 model Payment {
@@ -272,9 +284,14 @@ model Payment {
   amountReceived Decimal
   method         PaymentMethod
   receiptNo      String        @unique
+  // চেক নম্বর / ব্যাংক / bKash TrxID — রসিদে ছাপা হয়
+  note           String?
   receivedBy     User          @relation("ReceivedByUser", fields: [receivedById], references: [id])
   receivedById   String
   paidAt         DateTime      @default(now())
+
+  @@index([installmentId, paidAt])
+  @@index([paidAt])
 }
 
 model PhaseTemplate {

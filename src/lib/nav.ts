@@ -45,7 +45,7 @@ export const PANELS: Record<string, Panel> = {
       // ADMIN সব লিড দেখে — সেলস প্যানেলের বোর্ডটিই ব্যবহার হয় (ROUTE_ROLES এ অনুমোদিত)
       { label: 'লিড ও পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare },
       { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2 },
-      { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet, upcomingPhase: 4 },
+      { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet },
       { label: 'রিপোর্ট', href: '/admin/reports', icon: BarChart3, upcomingPhase: 6 },
     ],
   },
@@ -83,9 +83,14 @@ export const PANELS: Record<string, Panel> = {
     title: 'অ্যাকাউন্টস প্যানেল',
     items: [
       { label: 'ড্যাশবোর্ড', href: '/accounts', icon: Home },
-      { label: 'পেমেন্ট শিডিউল', href: '/accounts/schedule', icon: CalendarClock, upcomingPhase: 4 },
-      { label: 'পেমেন্ট এন্ট্রি', href: '/accounts/payments', icon: Banknote, upcomingPhase: 4 },
-      { label: 'ওভারডিউ রিপোর্ট', href: '/accounts/overdue', icon: Receipt, upcomingPhase: 4 },
+      {
+        label: 'পেমেন্ট শিডিউল',
+        href: '/accounts/schedule',
+        icon: CalendarClock,
+        matchPrefixes: ['/accounts/schedule'],
+      },
+      { label: 'পেমেন্ট এন্ট্রি', href: '/accounts/payments', icon: Banknote },
+      { label: 'ওভারডিউ রিপোর্ট', href: '/accounts/overdue', icon: Receipt },
     ],
   },
   '/customer': {
@@ -94,7 +99,7 @@ export const PANELS: Record<string, Panel> = {
     items: [
       { label: 'আমার ইউনিট', href: '/customer', icon: Home },
       { label: 'নির্মাণ অগ্রগতি', href: '/customer/progress', icon: HardHat },
-      { label: 'পেমেন্ট', href: '/customer/payments', icon: CreditCard, upcomingPhase: 5 },
+      { label: 'পেমেন্ট', href: '/customer/payments', icon: CreditCard },
       { label: 'ডকুমেন্ট', href: '/customer/documents', icon: FileText, upcomingPhase: 5 },
     ],
   },
