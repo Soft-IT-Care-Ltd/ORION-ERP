@@ -100,7 +100,7 @@ export const PANELS: Record<string, Panel> = {
       { label: 'আমার ইউনিট', href: '/customer', icon: Home },
       { label: 'নির্মাণ অগ্রগতি', href: '/customer/progress', icon: HardHat },
       { label: 'পেমেন্ট', href: '/customer/payments', icon: CreditCard },
-      { label: 'ডকুমেন্ট', href: '/customer/documents', icon: FileText, upcomingPhase: 5 },
+      { label: 'ডকুমেন্ট', href: '/customer/documents', icon: FileText },
     ],
   },
 };

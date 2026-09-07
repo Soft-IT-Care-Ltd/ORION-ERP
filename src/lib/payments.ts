@@ -301,6 +301,8 @@ export type PaymentView = {
   note: string | null;
   /** server এ ফরম্যাট করা — client এ করলে TZ ভেদে hydration mismatch হতো */
   paidAtLabel: string;
+  /** epoch ms — পেমেন্ট হিস্টরি সাজাতে (লেবেল দিয়ে সাজানো যেত না) */
+  paidAtTime: number;
   receivedByName: string;
 };
 
@@ -401,9 +403,37 @@ export function toInstallmentView(row: InstallmentRow, now: Date): InstallmentVi
       method: p.method,
       note: p.note,
       paidAtLabel: format(p.paidAt, 'dd MMM yyyy, h:mm a'),
+      paidAtTime: p.paidAt.getTime(),
       receivedByName: p.receivedBy.name,
     })),
   };
+}
+
+/* ---------------------------------------------------- payment history */
+
+/** পেমেন্ট হিস্টরির একটি সারি — কোন কিস্তির বিপরীতে টাকা এসেছিল তা সহ */
+export type PaymentHistoryItem = PaymentView & {
+  installmentId: string;
+  installmentLabel: string;
+};
+
+/**
+ * শিডিউলের সব কিস্তির পেমেন্টগুলো একটি তালিকায় — সবচেয়ে সাম্প্রতিকটি আগে।
+ *
+ * PRD সেকশন ৫.৪ — কাস্টমার "কবে কত দিয়েছি" এক নজরে দেখেন, আর প্রতিটির পাশে
+ * রসিদের লিংক থাকে। কিস্তি-ভিত্তিক ভিউটা `PaymentScheduleTable` এই দেয়, তাই
+ * এখানে ক্রমটা তারিখের।
+ */
+export function paymentHistory(installments: InstallmentView[]): PaymentHistoryItem[] {
+  return installments
+    .flatMap((installment) =>
+      installment.payments.map((payment) => ({
+        ...payment,
+        installmentId: installment.id,
+        installmentLabel: installment.label,
+      })),
+    )
+    .sort((a, b) => b.paidAtTime - a.paidAtTime);
 }
 
 /* ------------------------------------------------------------ receipt */

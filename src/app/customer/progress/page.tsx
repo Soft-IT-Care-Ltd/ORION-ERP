@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { HardHat, MapPin } from 'lucide-react';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { loadCustomerUnits } from '@/lib/customer-data';
 import { loadUnitTimeline } from '@/lib/phase-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhaseProgressSummary, PhaseTimeline, PhaseUpdateLog } from '@/components/phase-timeline';
@@ -12,37 +12,17 @@ export const metadata = { title: 'নির্মাণ অগ্রগতি' }
  * PRD সেকশন ৫.২ ও ৫.৪ — কাস্টমার নিজের ইউনিটের progress timeline ও সাইট ফটো দেখেন।
  *
  * এখানে `PhaseTimeline` কে `actions` ছাড়া ব্যবহার করা হয়েছে, তাই এটি সম্পূর্ণ
- * read-only — কাস্টমার কিছু বদলাতে পারেন না (PRD সেকশন ৪)।
+ * read-only — কাস্টমার কিছু বদলাতে পারেন না (PRD সেকশন ৪)। ইউনিটের তালিকা
+ * ড্যাশবোর্ডের মতোই `lib/customer-data.ts` থেকে আসে।
  */
 export default async function CustomerProgressPage() {
   const session = await auth();
   if (!session?.user) redirect('/login?callbackUrl=/customer/progress');
 
-  const customer = await prisma.customer.findUnique({
-    where: { userId: session.user.id },
-    select: {
-      sales: {
-        select: {
-          id: true,
-          status: true,
-          unit: {
-            select: {
-              id: true,
-              unitNo: true,
-              sizeSqft: true,
-              project: { select: { name: true, location: true } },
-            },
-          },
-        },
-        orderBy: { saleDate: 'desc' },
-      },
-    },
-  });
-
   const now = new Date();
-  const sales = customer?.sales ?? [];
+  const units = await loadCustomerUnits(session.user.id);
   const timelines = await Promise.all(
-    sales.map(async (sale) => ({ sale, timeline: await loadUnitTimeline(sale.unit.id, now) })),
+    units.map(async (unit) => ({ unit, timeline: await loadUnitTimeline(unit.unitId, now) })),
   );
 
   return (
@@ -63,12 +43,12 @@ export default async function CustomerProgressPage() {
           </CardContent>
         </Card>
       ) : (
-        timelines.map(({ sale, timeline }) => (
-          <div key={sale.id} className="space-y-3">
+        timelines.map(({ unit, timeline }) => (
+          <div key={unit.saleId} className="space-y-3">
             <PhaseProgressSummary
               summary={timeline.summary}
-              title={`${sale.unit.project.name} — ${sale.unit.unitNo}`}
-              subtitle={sale.unit.project.location}
+              title={unit.label}
+              subtitle={unit.projectLocation}
             />
 
             <Card>
@@ -76,8 +56,8 @@ export default async function CustomerProgressPage() {
                 <CardTitle className="text-base">ফেজ টাইমলাইন</CardTitle>
                 <CardDescription className="flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
-                  {sale.unit.project.location}
-                  {sale.unit.sizeSqft ? ` · ${Number(sale.unit.sizeSqft)} sqft` : null}
+                  {unit.projectLocation}
+                  {unit.sizeSqft ? ` · ${unit.sizeSqft} sqft` : null}
                 </CardDescription>
               </CardHeader>
               <CardContent>

@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation';
-import { format } from 'date-fns';
 import { CreditCard, Info } from 'lucide-react';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { loadCustomerUnits } from '@/lib/customer-data';
 import { loadSalePlan, markOverdueInstallments } from '@/lib/payment-data';
+import { paymentHistory } from '@/lib/payments';
 import { formatBDT } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
+import { PaymentHistory, PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
 
 export const metadata = { title: 'পেমেন্ট' };
 
@@ -16,7 +16,8 @@ export const metadata = { title: 'পেমেন্ট' };
  *
  * `customer/progress/page.tsx` এর মতোই এখানে `PaymentScheduleTable` কে `actions`
  * ছাড়া ব্যবহার করা হয়েছে, তাই এটি সম্পূর্ণ read-only — কাস্টমার কিছু বদলাতে
- * পারেন না (PRD সেকশন ৪)।
+ * পারেন না (PRD সেকশন ৪)। ইউনিটের তালিকা ড্যাশবোর্ডের মতোই `lib/customer-data.ts`
+ * থেকে আসে, যাতে স্কোপ (নিজের সেল) এক জায়গাতেই ঠিক হয়।
  */
 export default async function CustomerPaymentsPage() {
   const session = await auth();
@@ -25,30 +26,9 @@ export default async function CustomerPaymentsPage() {
   const now = new Date();
   await markOverdueInstallments(now);
 
-  const customer = await prisma.customer.findUnique({
-    where: { userId: session.user.id },
-    select: {
-      sales: {
-        select: {
-          id: true,
-          totalAmount: true,
-          saleDate: true,
-          unit: {
-            select: {
-              unitNo: true,
-              sizeSqft: true,
-              project: { select: { name: true, location: true } },
-            },
-          },
-        },
-        orderBy: { saleDate: 'desc' },
-      },
-    },
-  });
-
-  const sales = customer?.sales ?? [];
+  const units = await loadCustomerUnits(session.user.id);
   const plans = await Promise.all(
-    sales.map(async (sale) => ({ sale, plan: await loadSalePlan(sale.id, now) })),
+    units.map(async (unit) => ({ unit, plan: await loadSalePlan(unit.saleId, now) })),
   );
 
   return (
@@ -71,12 +51,12 @@ export default async function CustomerPaymentsPage() {
           </CardContent>
         </Card>
       ) : (
-        plans.map(({ sale, plan }) => (
-          <div key={sale.id} className="space-y-3">
+        plans.map(({ unit, plan }) => (
+          <div key={unit.saleId} className="space-y-3">
             <PaymentSummary
               summary={plan.summary}
-              title={`${sale.unit.project.name} — ${sale.unit.unitNo}`}
-              subtitle={`${sale.unit.project.location} · সেল ${format(sale.saleDate, 'dd MMM yyyy')} · ${formatBDT(Number(sale.totalAmount))}`}
+              title={unit.label}
+              subtitle={`${unit.projectLocation} · বুকিং ${unit.bookingDateLabel} · ${formatBDT(unit.totalAmount)}`}
             />
 
             <Card>
@@ -90,6 +70,21 @@ export default async function CustomerPaymentsPage() {
                 <PaymentScheduleTable
                   installments={plan.installments}
                   emptyMessage="আপনার পেমেন্ট শিডিউল এখনো তৈরি হয়নি — অ্যাকাউন্টস টিম শীঘ্রই সেট করবে"
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">পরিশোধের ইতিহাস</CardTitle>
+                <CardDescription>
+                  কবে কত টাকা জমা হয়েছে — প্রতিটির পাশে রসিদ ডাউনলোডের বোতাম
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PaymentHistory
+                  payments={paymentHistory(plan.installments)}
+                  emptyMessage="এখনো কোনো পেমেন্ট জমা পড়েনি — প্রথম কিস্তি জমা হলে রসিদ এখানে দেখা যাবে"
                 />
               </CardContent>
             </Card>
