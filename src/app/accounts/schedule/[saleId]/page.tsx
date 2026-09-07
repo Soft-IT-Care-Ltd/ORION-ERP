@@ -5,19 +5,28 @@ import { ArrowLeft, Building2, Phone, User } from 'lucide-react';
 import { getAuthorizedUser } from '@/lib/guards';
 import { can } from '@/lib/rbac';
 import { findScopedSale, loadSalePlan, markOverdueInstallments } from '@/lib/payment-data';
+import { loadSaleDocuments } from '@/lib/document-data';
+import { groupDocuments } from '@/lib/documents';
 import { SALE_STATUS_BADGE, SALE_STATUS_HINT, SALE_STATUS_LABEL } from '@/lib/sales';
 import { cn, formatBDT } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
+import { DocumentGroupList } from '@/components/documents';
 import { PaymentEntryButton } from '../../payments/payment-entry-dialog';
 import { PlanBuilder } from './plan-builder';
+import { SaleDocumentUploadForm } from './document-upload-form';
 
 export const metadata = { title: 'পেমেন্ট প্ল্যান' };
 
 /**
  * PRD সেকশন ৫.৩ — এক সেলের পেমেন্ট প্ল্যান: বিল্ডার + রঙ-কোডেড শিডিউল +
  * প্রতিটি কিস্তির বিপরীতে পেমেন্ট এন্ট্রি।
+ *
+ * সেলের কাগজপত্রও (PRD সেকশন ৫.৪ — বুকিং ফর্ম, এগ্রিমেন্ট, অ্যালটমেন্ট লেটার)
+ * এখান থেকেই আপলোড হয়। Admin এর `ROUTE_ROLES` এ `/accounts` অনুমোদিত, তাই দুই
+ * প্যানেলের জন্য আলাদা ফর্ম রাখার দরকার নেই — অ্যাডমিন পেমেন্ট ওভারভিউ থেকে
+ * এই পাতাতেই আসে।
  */
 export default async function SchedulePage({ params }: { params: { saleId: string } }) {
   const accounts = await getAuthorizedUser('paymentPlan:view');
@@ -30,8 +39,14 @@ export default async function SchedulePage({ params }: { params: { saleId: strin
   if (!sale) notFound();
 
   const plan = await loadSalePlan(sale.id, now);
+  // অফিসের কে ফাইলটি দিয়েছেন সেটি এখানে দরকারি (কাস্টমারের পাতায় নয়)
+  const documents = groupDocuments(
+    await loadSaleDocuments(sale.id, sale.unit.unitNo, { showUploader: true }),
+  );
   // প্ল্যান এডিট ও পেমেন্ট এন্ট্রি — PRD সেকশন ৪ (রোল হার্ডকোড না করে permission দিয়ে)
   const canManage = can(accounts.role, 'paymentPlan:manage');
+  // ডকুমেন্ট আপলোড আলাদা permission — Admin ও Accounts (PRD সেকশন ৪)
+  const canManageDocuments = can(accounts.role, 'document:manageSale');
 
   // যে কিস্তিতে টাকা জমা পড়েছে সেটি বিল্ডারে তালা-দেওয়া থাকবে
   const lockedIds = plan.installments.filter((i) => i.payments.length > 0).map((i) => i.id);
@@ -167,6 +182,27 @@ export default async function SchedulePage({ params }: { params: { saleId: strin
         </CardHeader>
         <CardContent>
           <PaymentScheduleTable installments={plan.installments} actions={actions} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">ডকুমেন্ট</CardTitle>
+          <CardDescription>
+            বুকিং ফর্ম, সেল এগ্রিমেন্ট, অ্যালটমেন্ট লেটার ও দলিল — কাস্টমার নিজের পোর্টাল
+            থেকে এগুলো ডাউনলোড করতে পারেন
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <DocumentGroupList
+            groups={documents}
+            emptyMessage="এই সেলের কোনো ডকুমেন্ট এখনো আপলোড করা হয়নি"
+          />
+          {canManageDocuments ? (
+            <div className="border-t pt-4">
+              <SaleDocumentUploadForm saleId={sale.id} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

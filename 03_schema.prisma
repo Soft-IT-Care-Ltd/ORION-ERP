@@ -104,6 +104,7 @@ model User {
   assignedLeads Lead[]        @relation("AssignedLeads")
   leadActivities LeadActivity[] @relation("LeadActivityAuthor")
   uploadedLeadDocuments LeadDocument[] @relation("LeadDocumentUploader")
+  uploadedSaleDocuments Document[]    @relation("SaleDocumentUploader")
   phaseUpdates  PhaseUpdate[]
   payments      Payment[]     @relation("ReceivedByUser")
   customer      Customer?
@@ -343,12 +344,23 @@ model PhaseUpdate {
 }
 
 model Document {
-  id         String   @id @default(cuid())
-  sale       Sale?    @relation(fields: [saleId], references: [id])
-  saleId     String?
-  type       String   // e.g. "Booking Form", "Sale Deed", "Allotment Letter", "Receipt"
-  fileUrl    String
-  uploadedAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  sale         Sale?    @relation(fields: [saleId], references: [id])
+  saleId       String?
+  // ফ্রি-টেক্সট, enum নয় — প্রজেক্টভেদে কাগজের নাম বদলায়। canonical তালিকা ও
+  // গ্রুপিং `lib/documents.ts` এ (e.g. "Booking Form", "Sale Agreement",
+  // "Allotment Letter", "Sale Deed", "Receipt")
+  type         String
+  fileUrl      String
+  // আপলোডের সময়কার আসল নাম — ডিস্কের নাম UUID (`lib/upload.ts`), তাই তালিকায়
+  // এটিই দেখানো হয় (LeadDocument এর মতোই)
+  fileName     String
+  description  String?
+  uploadedBy   User     @relation("SaleDocumentUploader", fields: [uploadedById], references: [id])
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+
+  @@index([saleId, uploadedAt])
 }
 
 model Notification {

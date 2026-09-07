@@ -54,6 +54,10 @@ export type Permission =
   | 'receipt:generate'
   | 'receipt:download'
   | 'document:upload'
+  // সেল/কাস্টমারের কাগজপত্র (booking form, allotment letter …) — PRD সেকশন ৪ এর
+  // "ডকুমেন্ট আপলোড/দেখা" সারিতে Accounts এর ঘরে "Payment-related"; লিড ডকুমেন্টের
+  // `document:upload` থেকে আলাদা, নইলে MARKETING/ENGINEER ও সেলে ফাইল দিতে পারত
+  | 'document:manageSale'
   | 'document:viewOwn'
   | 'document:viewAll'
   | 'report:full'
@@ -78,6 +82,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'receipt:generate',
   'receipt:download',
   'document:upload',
+  'document:manageSale',
   'document:viewOwn',
   'document:viewAll',
   'report:full',
@@ -112,6 +117,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'payment:create',
     'receipt:generate',
     'document:upload',
+    'document:manageSale',
     'report:financial',
   ],
 

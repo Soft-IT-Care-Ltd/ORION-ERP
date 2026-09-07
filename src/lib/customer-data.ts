@@ -4,15 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { loadSalePlan, type SalePlan } from '@/lib/payment-data';
 import { loadUnitTimeline, type UnitTimeline } from '@/lib/phase-data';
 import { paymentHistory, type PaymentHistoryItem } from '@/lib/payments';
-import {
-  DOCUMENT_TYPE_LABEL,
-  documentDownloadName,
-  fileExtLabel,
-  groupDocuments,
-  normalizeDocumentType,
-  type DocumentGroup,
-  type DocumentItem,
-} from '@/lib/documents';
+import { loadSaleDocuments } from '@/lib/document-data';
+import { groupDocuments, type DocumentGroup, type DocumentItem } from '@/lib/documents';
 import { formatBDT } from '@/lib/utils';
 
 /**
@@ -104,26 +97,9 @@ export async function loadCustomerUnits(userId: string): Promise<CustomerUnit[]>
  * দেখানো হয় (PRD সেকশন ৫.৪ — "booking form, allotment letter … + receipt")।
  */
 function buildDocumentGroups(
-  unit: CustomerUnit,
-  documents: { id: string; type: string; fileUrl: string; uploadedAt: Date }[],
+  uploaded: DocumentItem[],
   payments: PaymentHistoryItem[],
 ): DocumentGroup[] {
-  const uploaded: DocumentItem[] = documents.map((doc) => {
-    const type = normalizeDocumentType(doc.type);
-    const raw = doc.type.trim();
-    return {
-      id: doc.id,
-      type,
-      // DB তে লেখা নামটাই শিরোনাম ("Money Receipt" লেখা থাকলে সেটিই দেখাবে,
-      // যদিও গ্রুপ হবে "পেমেন্ট রসিদ")
-      title: raw || DOCUMENT_TYPE_LABEL[type],
-      meta: format(doc.uploadedAt, 'dd MMM yyyy'),
-      fileUrl: doc.fileUrl,
-      downloadName: documentDownloadName(type, unit.unitNo, doc.fileUrl),
-      badge: fileExtLabel(doc.fileUrl),
-    };
-  });
-
   const receipts: DocumentItem[] = payments.map((payment) => ({
     id: `receipt-${payment.id}`,
     type: 'Receipt',
@@ -153,16 +129,13 @@ async function loadUnitDetail(sale: SaleRow, now: Date): Promise<CustomerUnitDet
   const [timeline, plan, documents] = await Promise.all([
     loadUnitTimeline(unit.unitId, now),
     loadSalePlan(unit.saleId, now),
-    prisma.document.findMany({
-      where: { saleId: unit.saleId },
-      select: { id: true, type: true, fileUrl: true, uploadedAt: true },
-      orderBy: { uploadedAt: 'desc' },
-    }),
+    // কে আপলোড করেছেন সেটি কাস্টমারকে দেখানো হয় না (`showUploader` বন্ধ)
+    loadSaleDocuments(unit.saleId, unit.unitNo),
   ]);
 
   const payments = paymentHistory(plan.installments);
 
-  return { unit, timeline, plan, payments, documents: buildDocumentGroups(unit, documents, payments) };
+  return { unit, timeline, plan, payments, documents: buildDocumentGroups(documents, payments) };
 }
 
 /**
@@ -199,16 +172,12 @@ export async function loadCustomerDocuments(
       const unit = toCustomerUnit(sale);
       const [plan, documents] = await Promise.all([
         loadSalePlan(unit.saleId, now),
-        prisma.document.findMany({
-          where: { saleId: unit.saleId },
-          select: { id: true, type: true, fileUrl: true, uploadedAt: true },
-          orderBy: { uploadedAt: 'desc' },
-        }),
+        loadSaleDocuments(unit.saleId, unit.unitNo),
       ]);
 
       return {
         unit,
-        documents: buildDocumentGroups(unit, documents, paymentHistory(plan.installments)),
+        documents: buildDocumentGroups(documents, paymentHistory(plan.installments)),
       };
     }),
   );
