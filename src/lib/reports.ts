@@ -1,4 +1,6 @@
 import type { LeadStage } from '@prisma/client';
+import type { CsvValue } from '@/lib/csv';
+import type { Permission } from '@/lib/rbac';
 
 /**
  * Admin ড্যাশবোর্ডের রিপোর্ট/চার্টের কনস্ট্যান্ট, টাইপ ও বিশুদ্ধ হিসাব —
@@ -154,4 +156,143 @@ export type CollectionReport = {
 /** ভাগ করে শতাংশ — শূন্য হর নিরাপদে সামলায় */
 export function ratio(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;
+}
+
+/* ------------------------------------------------------------ exports */
+
+/**
+ * এক্সপোর্টযোগ্য রিপোর্টের তালিকা — PRD সেকশন ৫.৭।
+ *
+ * প্রতিটি রিপোর্ট একই আকারে ডেটা দেয় (`ReportDataset`), তাই CSV রুট
+ * (`/api/reports/<id>`) ও প্রিন্ট-ভিউ (`/admin/reports/print`) — দুটোই একই
+ * লোডার ব্যবহার করে, আলাদা করে কিছু লিখতে হয় না।
+ */
+
+/** ঘরের ধরন — CSV তে কাঁচা সংখ্যা যায় (Excel এ যোগ করা যায়), পর্দায় ফরম্যাট হয় */
+export type ReportColumnKind = 'text' | 'number' | 'money' | 'percent';
+
+export type ReportColumn = {
+  header: string;
+  kind?: ReportColumnKind;
+};
+
+export type ReportDataset = {
+  columns: ReportColumn[];
+  rows: CsvValue[][];
+};
+
+export type ReportGroup = 'sales' | 'projects' | 'finance';
+
+export const REPORT_GROUP_LABEL: Record<ReportGroup, string> = {
+  sales: 'সেলস ও মার্কেটিং',
+  projects: 'প্রজেক্ট',
+  finance: 'আর্থিক',
+};
+
+export type ReportDefinition = {
+  label: string;
+  description: string;
+  group: ReportGroup;
+  /** এই রিপোর্ট নামাতে কোন permission লাগে (`lib/rbac.ts`) */
+  permission: Permission;
+  /** সময়সীমার টগল প্রযোজ্য কি না — না হলে রিপোর্টটি সবসময় "এখনকার অবস্থা" */
+  timeScoped: boolean;
+  /** ফাইলনেমের গোড়া — শেষে তারিখ বসে */
+  slug: string;
+};
+
+export const REPORTS = {
+  'sales-funnel': {
+    label: 'সেলস ফানেল ও কনভার্শন',
+    description: 'স্টেজভিত্তিক লিড সংখ্যা ও পরের ধাপে যাওয়ার হার',
+    group: 'sales',
+    permission: 'report:full',
+    timeScoped: true,
+    slug: 'sales-funnel',
+  },
+  'executive-performance': {
+    label: 'এক্সিকিউটিভ পারফরম্যান্স',
+    description: 'মার্কেটিং এক্সিকিউটিভভেদে লিড, Won/Lost ও বিক্রয়মূল্য',
+    group: 'sales',
+    permission: 'report:full',
+    timeScoped: true,
+    slug: 'executive-performance',
+  },
+  'lead-source': {
+    label: 'লিড সোর্স ROI',
+    description: 'কোন সোর্স থেকে কত লিড ও কত কনভার্শন হয়েছে',
+    group: 'sales',
+    permission: 'report:full',
+    timeScoped: true,
+    slug: 'lead-source',
+  },
+  leads: {
+    label: 'লিড তালিকা',
+    description: 'সব ফিল্ডসহ কাঁচা লিড ডেটা — নিজের মতো ছেঁকে নেওয়ার জন্য',
+    group: 'sales',
+    permission: 'report:full',
+    timeScoped: true,
+    slug: 'leads',
+  },
+  'project-progress': {
+    label: 'ইউনিট-ভিত্তিক অগ্রগতি',
+    description: 'প্রতিটি ইউনিটের % complete, চলমান ফেজ ও বিলম্ব',
+    group: 'projects',
+    permission: 'report:full',
+    timeScoped: false,
+    slug: 'project-progress',
+  },
+  collection: {
+    label: 'আদায় বনাম পাওনা (মাসিক)',
+    description: 'শেষ ১২ মাসের due, আদায় ও আদায়ের হার',
+    group: 'finance',
+    permission: 'report:financial',
+    timeScoped: false,
+    slug: 'collection',
+  },
+  'overdue-aging': {
+    label: 'বকেয়া aging',
+    description: '০–১৫ / ১৬–৩০ / ৩০+ দিনের বকেয়া কিস্তির বিস্তারিত',
+    group: 'finance',
+    permission: 'report:financial',
+    timeScoped: false,
+    slug: 'overdue-aging',
+  },
+  payments: {
+    label: 'পেমেন্ট লেজার',
+    description: 'রসিদ নম্বরসহ আদায় হওয়া প্রতিটি টাকার এন্ট্রি',
+    group: 'finance',
+    permission: 'report:financial',
+    timeScoped: true,
+    slug: 'payments',
+  },
+} as const satisfies Record<string, ReportDefinition>;
+
+export type ReportId = keyof typeof REPORTS;
+
+export const REPORT_IDS = Object.keys(REPORTS) as ReportId[];
+
+export function isReportId(value: string): value is ReportId {
+  return Object.prototype.hasOwnProperty.call(REPORTS, value);
+}
+
+/** "orion-payments-2026-09-09.csv" */
+export function reportFilename(id: ReportId, now: Date, extension = 'csv'): string {
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+  return `orion-${REPORTS[id].slug}-${stamp}.${extension}`;
+}
+
+/** পর্দায় দেখানোর জন্য ঘরের মান — CSV এর কাঁচা মান থেকে আলাদা */
+export function formatReportCell(
+  value: CsvValue,
+  kind: ReportColumnKind | undefined,
+  money: (n: number) => string,
+): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (kind === 'money') return money(Number(value));
+  if (kind === 'percent') return `${value}%`;
+  if (kind === 'number') return new Intl.NumberFormat('en-IN').format(Number(value));
+  return String(value);
 }

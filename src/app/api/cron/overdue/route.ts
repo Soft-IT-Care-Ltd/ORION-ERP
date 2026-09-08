@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { loadAgingReport, markOverdueInstallments } from '@/lib/payment-data';
 import { runNotificationSweep } from '@/lib/notifications';
+import { dispatchPendingDeliveries, queuePendingDeliveries } from '@/lib/channels';
 
 /**
- * PRD সেকশন ৫.৩ ও ৫.৬ — দৈনিক sweep: ওভারডিউ ডিটেকশন + সময়-নির্ভর নোটিফিকেশন।
+ * PRD সেকশন ৫.৩ ও ৫.৬ — দৈনিক sweep: ওভারডিউ ডিটেকশন + সময়-নির্ভর নোটিফিকেশন
+ * + Email/SMS ডিসপ্যাচ।
  *
  * ক্রমটা জরুরি — আগে কিস্তির স্ট্যাটাস তাজা করা হয়, তারপর সেই অবস্থা ধরে
- * রিমাইন্ডার লেখা হয় (ফলো-আপ ওভারডিউ, due এর ৭ দিন আগে, বকেয়া, ফেজ সম্পন্ন)।
+ * রিমাইন্ডার লেখা হয় (ফলো-আপ ওভারডিউ, due এর ৭ দিন আগে, বকেয়া, ফেজ সম্পন্ন),
+ * সবশেষে সেগুলোর মধ্যে যেগুলো ইমেইল/SMS এও যাওয়ার কথা সেগুলো পাঠানো হয়।
  *
  * দিনে একবার চালানোই যথেষ্ট, কারণ "বকেয়া" তারিখ বদলালেই বদলায়:
  *
@@ -22,6 +25,11 @@ import { runNotificationSweep } from '@/lib/notifications';
  * নোটিফিকেশনেরও একই ফলব্যাক আছে — বেল লোডের সময় ঘণ্টায় একবার
  * (`lib/notifications.ts` → `sweepIfStale`)। দুটোই idempotent, তাই একই খবর
  * দুবার লেখা হয় না।
+ *
+ * তবে **Email/SMS এর কোনো ফলব্যাক নেই** — সেগুলো শুধু এখান থেকেই যায়। পেজ
+ * রেন্ডারের সময় বাইরে বার্তা পাঠানো ঠিক নয় (লেটেন্সি, আর একটি পেজ খোলা কখনো
+ * SMS পাঠানোর কারণ হওয়া উচিত নয়)। অর্থাৎ চ্যানেল চালু রাখতে cron আবশ্যক;
+ * না চললে খবরগুলো সারিতে জমা থাকবে আর পরের রানে চলে যাবে।
  */
 
 // প্রতিবার আসল DB দেখে — এই রুট কখনো ক্যাশ হবে না
@@ -47,6 +55,13 @@ export async function GET(request: Request) {
     const sweep = await markOverdueInstallments(now);
     // স্ট্যাটাস তাজা হওয়ার পরেই রিমাইন্ডার — নইলে সদ্য বকেয়া কিস্তিগুলো বাদ পড়ত
     const notifications = await runNotificationSweep(now);
+
+    // এই রানের নতুন নোটিফিকেশনগুলোসহ অপেক্ষমাণ সব ডেলিভারি (PRD সেকশন ৫.৬)।
+    // পাঠানোটা আলাদা ধাপ — গেটওয়ে ডাউন থাকলে সারিতে থেকে যায়, উপরের কাজগুলো
+    // ততক্ষণে হয়ে গেছে
+    const queued = await queuePendingDeliveries(now);
+    const dispatched = await dispatchPendingDeliveries(now);
+
     const aging = await loadAgingReport(now);
 
     return NextResponse.json({
@@ -54,6 +69,7 @@ export async function GET(request: Request) {
       ranAt: now.toISOString(),
       sweep,
       notifications,
+      channels: { ...queued, ...dispatched },
       aging: {
         totalAmount: aging.totalAmount,
         totalCount: aging.totalCount,

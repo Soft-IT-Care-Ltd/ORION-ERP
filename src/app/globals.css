@@ -144,6 +144,17 @@
     print-color-adjust: exact;
   }
 
+  /* রিপোর্টের টেবিল — সারি যেন পাতার মাঝখানে দুভাগ না হয়, আর হেডারটি
+     প্রতিটি পাতায় আবার ছাপা হয় (`/admin/reports/<id>`) */
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    break-inside: avoid;
+  }
+
   @page {
     size: A4;
     margin: 14mm;

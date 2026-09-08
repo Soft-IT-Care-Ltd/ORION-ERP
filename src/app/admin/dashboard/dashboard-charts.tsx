@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { format } from 'date-fns';
 import {
   funnelRangeStart,
@@ -7,8 +6,9 @@ import {
   loadSalesFunnel,
   COLLECTION_MONTHS,
 } from '@/lib/report-data';
-import { FUNNEL_RANGES, FUNNEL_RANGE_LABEL, type FunnelRange } from '@/lib/reports';
-import { formatBDT, cn } from '@/lib/utils';
+import type { FunnelRange } from '@/lib/reports';
+import { formatBDT } from '@/lib/utils';
+import { RangeTabs } from '@/components/reports/range-tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SalesFunnelChart } from './sales-funnel-chart';
 import { ProjectProgressChart } from './project-progress-chart';
@@ -55,24 +55,12 @@ export async function DashboardCharts({ funnelRange }: { funnelRange: FunnelRang
             </CardDescription>
           </div>
           {/* PRD সেকশন ৫.১ — "মাসিক/quarterly ভিত্তিতে দেখা যাবে" */}
-          <nav className="flex shrink-0 gap-1 rounded-md bg-muted p-1" aria-label="ফানেলের সময়সীমা">
-            {FUNNEL_RANGES.map((range) => (
-              <Link
-                key={range}
-                href={range === 'month' ? '/admin' : `/admin?funnel=${range}`}
-                scroll={false}
-                aria-current={range === funnelRange ? 'page' : undefined}
-                className={cn(
-                  'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-                  range === funnelRange
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {FUNNEL_RANGE_LABEL[range]}
-              </Link>
-            ))}
-          </nav>
+          <RangeTabs
+            basePath="/admin"
+            param="funnel"
+            current={funnelRange}
+            label="ফানেলের সময়সীমা"
+          />
         </CardHeader>
         <CardContent>
           <SalesFunnelChart report={funnel} />

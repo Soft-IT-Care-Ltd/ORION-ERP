@@ -14,7 +14,7 @@ import {
   computeInstallmentStatus,
 } from '@/lib/payments';
 import { formatBDT } from '@/lib/utils';
-import { PrintButton } from './print-button';
+import { PrintButton } from '@/components/print-button';
 
 export const metadata = { title: 'পেমেন্ট রসিদ' };
 

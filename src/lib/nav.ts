@@ -46,7 +46,12 @@ export const PANELS: Record<string, Panel> = {
       { label: 'লিড ও পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare },
       { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2 },
       { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet },
-      { label: 'রিপোর্ট', href: '/admin/reports', icon: BarChart3, upcomingPhase: 6 },
+      {
+        label: 'রিপোর্ট',
+        href: '/admin/reports',
+        icon: BarChart3,
+        matchPrefixes: ['/admin/reports'],
+      },
     ],
   },
   '/sales': {

@@ -76,6 +76,19 @@ enum PaymentMethod {
   OTHER
 }
 
+enum NotificationChannel {
+  EMAIL
+  SMS
+  // WhatsApp পরে যোগ হবে (PRD সেকশন ৫.৬) — তখন শুধু এই enum ও একটি transport লাগবে
+}
+
+enum DeliveryStatus {
+  PENDING   // সারিতে আছে, এখনো পাঠানো হয়নি
+  SENT
+  FAILED    // প্রোভাইডার ত্রুটি — পরের রানে আবার চেষ্টা হবে (সীমিতবার)
+  SKIPPED   // চ্যানেল কনফিগার করা নেই, বা ঠিকানা/নম্বর নেই
+}
+
 enum PhaseStatus {
   UPCOMING
   IN_PROGRESS
@@ -377,11 +390,42 @@ model Notification {
   key        String?
   readStatus Boolean  @default(false)
   createdAt  DateTime @default(now())
+  // Email/SMS সারিতে ঢোকানো হয়ে গেছে কি না (`lib/channels`)। null মানে এখনো
+  // ঢোকানো হয়নি — ডিসপ্যাচার ঠিক এই সারিগুলোই খোঁজে, তাই বারবার পুরো টেবিল
+  // স্ক্যান করতে হয় না
+  channelsQueuedAt DateTime?
+
+  deliveries NotificationDelivery[]
 
   // বেল ড্রপডাউন ও unread badge এর কুয়েরি
   @@index([userId, readStatus, createdAt])
+  // ডেলিভারি সারিতে ঢোকানো বাকি আছে এমন নোটিফিকেশন
+  @@index([channelsQueuedAt])
   // ডিডুপ — `createMany({ skipDuplicates: true })` এই কনস্ট্রেইন্টের উপর কাজ করে
   @@unique([userId, key])
+}
+
+model NotificationDelivery {
+  id             String              @id @default(cuid())
+  notification   Notification        @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notificationId String
+  channel        NotificationChannel
+  status         DeliveryStatus      @default(PENDING)
+  // কোথায় পাঠানো হয়েছিল — ইমেইল ঠিকানা বা E.164 নম্বরের স্ন্যাপশট। ইউজার পরে
+  // ঠিকানা বদলালেও কোথায় গিয়েছিল তার হিসাব থাকে
+  destination    String?
+  // প্রোভাইডারের মেসেজ id — বিল/ডেলিভারি রিপোর্টের সাথে মেলাতে
+  providerRef    String?
+  error          String?
+  attempts       Int                 @default(0)
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  // একটি নোটিফিকেশন এক চ্যানেলে একবারই সারিতে ঢোকে
+  @@unique([notificationId, channel])
+  // ডিসপ্যাচারের কুয়েরি — অপেক্ষমাণগুলো পুরনো থেকে
+  @@index([status, createdAt])
 }
 
 model ActivityLog {
