@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { loadAgingReport, markOverdueInstallments } from '@/lib/payment-data';
+import { runNotificationSweep } from '@/lib/notifications';
 
 /**
- * PRD সেকশন ৫.৩ — ওভারডিউ ডিটেকশন, সময়সূচি ধরে (cron)।
+ * PRD সেকশন ৫.৩ ও ৫.৬ — দৈনিক sweep: ওভারডিউ ডিটেকশন + সময়-নির্ভর নোটিফিকেশন।
+ *
+ * ক্রমটা জরুরি — আগে কিস্তির স্ট্যাটাস তাজা করা হয়, তারপর সেই অবস্থা ধরে
+ * রিমাইন্ডার লেখা হয় (ফলো-আপ ওভারডিউ, due এর ৭ দিন আগে, বকেয়া, ফেজ সম্পন্ন)।
  *
  * দিনে একবার চালানোই যথেষ্ট, কারণ "বকেয়া" তারিখ বদলালেই বদলায়:
  *
@@ -15,6 +19,9 @@ import { loadAgingReport, markOverdueInstallments } from '@/lib/payment-data';
  * sweep চলে, আর টেবিল যেভাবেই হোক আজকের তারিখ ধরে স্ট্যাটাস হিসাব করে
  * (`lib/payments.ts` → `computeInstallmentStatus`)। cron টা DB এর `status`
  * কলামকে তাজা রাখে, যাতে রিপোর্ট-কুয়েরিগুলো ইনডেক্স ব্যবহার করতে পারে।
+ * নোটিফিকেশনেরও একই ফলব্যাক আছে — বেল লোডের সময় ঘণ্টায় একবার
+ * (`lib/notifications.ts` → `sweepIfStale`)। দুটোই idempotent, তাই একই খবর
+ * দুবার লেখা হয় না।
  */
 
 // প্রতিবার আসল DB দেখে — এই রুট কখনো ক্যাশ হবে না
@@ -38,12 +45,15 @@ export async function GET(request: Request) {
   try {
     const now = new Date();
     const sweep = await markOverdueInstallments(now);
+    // স্ট্যাটাস তাজা হওয়ার পরেই রিমাইন্ডার — নইলে সদ্য বকেয়া কিস্তিগুলো বাদ পড়ত
+    const notifications = await runNotificationSweep(now);
     const aging = await loadAgingReport(now);
 
     return NextResponse.json({
       ok: true,
       ranAt: now.toISOString(),
       sweep,
+      notifications,
       aging: {
         totalAmount: aging.totalAmount,
         totalCount: aging.totalCount,

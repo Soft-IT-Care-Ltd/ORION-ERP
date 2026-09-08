@@ -149,6 +149,7 @@ export async function recordPayment(
         userId: sale.customer.userId,
         type: 'PAYMENT_DUE',
         message: `${formatBDT(amountReceived)} জমা হয়েছে (${installment.label}) — রসিদ ${payment.receiptNo}`,
+        link: `/receipts/${payment.id}`,
       });
 
       revalidatePayments(sale.id);

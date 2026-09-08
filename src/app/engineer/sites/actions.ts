@@ -5,7 +5,7 @@ import { PhaseStatus, Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
-import { notify, notifyMany } from '@/lib/notifications';
+import { notifyDonePhases, notifyMany } from '@/lib/notifications';
 import { unitScope } from '@/lib/project-access';
 import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action-result';
 import { computePhaseStatus } from '@/lib/phases';
@@ -173,16 +173,11 @@ export async function submitPhaseUpdate(
       userIds: admins.map((a) => a.id),
       type: 'PHASE_MILESTONE',
       message: label,
+      link: `/admin/projects/${phase.unit.project.id}/units/${phase.unit.id}`,
     });
 
-    const customerUserId = phase.unit.sale?.customer.userId;
-    if (customerUserId) {
-      await notify({
-        userId: customerUserId,
-        type: 'PHASE_MILESTONE',
-        message: `আপনার ইউনিটের "${phase.name}" ফেজ সম্পন্ন হয়েছে`,
-      });
-    }
+    // কাস্টমারের খবরটি sweep ও এখান থেকে — দুই পথেই একই key, তাই দুবার যায় না
+    await notifyDonePhases({ phaseId: phase.id, now });
   }
 
   revalidatePath('/engineer');

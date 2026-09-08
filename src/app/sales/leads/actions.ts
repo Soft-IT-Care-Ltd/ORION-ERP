@@ -217,6 +217,7 @@ export async function createLead(formData: FormData): Promise<ActionResult<{ id:
         userId: assignedToId,
         type: 'LEAD_ASSIGNED',
         message: `নতুন লিড আপনাকে দেওয়া হয়েছে — ${lead.name}`,
+        link: `/sales/leads/${lead.id}`,
       });
     }
 
@@ -318,6 +319,7 @@ export async function updateLead(formData: FormData): Promise<ActionResult> {
         userId: assignedToId,
         type: 'LEAD_ASSIGNED',
         message: `একটি লিড আপনাকে দেওয়া হয়েছে — ${input.name}`,
+        link: `/sales/leads/${input.id}`,
       });
     }
 

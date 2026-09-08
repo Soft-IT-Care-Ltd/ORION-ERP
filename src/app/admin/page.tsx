@@ -1,64 +1,62 @@
 import Link from 'next/link';
-import { Building2, KanbanSquare, Users, Wallet } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Building2, CalendarClock, KanbanSquare, Users, Wallet } from 'lucide-react';
+import { loadDashboardStats } from '@/lib/report-data';
+import { parseFunnelRange } from '@/lib/reports';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DashboardCharts } from './dashboard';
 
 export const metadata = { title: 'অ্যাডমিন ড্যাশবোর্ড' };
 
-export default async function AdminDashboard() {
-  const [activeUsers, leads, projects, units] = await Promise.all([
-    prisma.user.count({ where: { active: true } }),
-    prisma.lead.count(),
-    prisma.project.count(),
-    prisma.unit.count(),
-  ]);
+export default async function AdminDashboard({
+  searchParams,
+}: {
+  searchParams: { funnel?: string };
+}) {
+  const stats = await loadDashboardStats(new Date());
+  const funnelRange = parseFunnelRange(searchParams.funnel);
 
-  const stats = [
-    { label: 'সক্রিয় ইউজার', value: activeUsers, icon: Users, href: '/admin/users' },
-    { label: 'মোট লিড', value: leads, icon: KanbanSquare },
-    { label: 'প্রজেক্ট', value: projects, icon: Building2, href: '/admin/projects' },
-    { label: 'ইউনিট', value: units, icon: Wallet, href: '/admin/projects' },
+  const cards = [
+    { label: 'সক্রিয় ইউজার', value: stats.activeUsers, icon: Users, href: '/admin/users' },
+    { label: 'মোট লিড', value: stats.leads, icon: KanbanSquare, href: '/sales/pipeline' },
+    { label: 'প্রজেক্ট', value: stats.projects, icon: Building2, href: '/admin/projects' },
+    { label: 'ইউনিট', value: stats.units, icon: Wallet, href: '/admin/projects' },
+    {
+      label: 'ফলো-আপ পেরিয়েছে',
+      value: stats.overdueFollowUps,
+      icon: CalendarClock,
+      href: '/sales/pipeline',
+      // শূন্য না হলে সংখ্যাটা লাল — এগুলোতেই আজ হাত দিতে হবে (PRD সেকশন ৫.৬)
+      alert: stats.overdueFollowUps > 0,
+    },
   ];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold">ড্যাশবোর্ড</h1>
-        <p className="text-sm text-muted-foreground">সিস্টেমের সারসংক্ষেপ</p>
+        <p className="text-sm text-muted-foreground">সিস্টেমের সারসংক্ষেপ ও রিপোর্ট</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, href }) => {
-          const card = (
-            <Card className={href ? 'transition-colors hover:bg-muted/50' : undefined}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {cards.map(({ label, value, icon: Icon, href, alert }) => (
+          <Link key={label} href={href}>
+            <Card className="h-full transition-colors hover:bg-muted/50">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold">{value}</p>
+                <p className={`text-2xl font-semibold ${alert ? 'text-destructive' : ''}`}>
+                  {value}
+                </p>
               </CardContent>
             </Card>
-          );
-          return href ? (
-            <Link key={label} href={href}>
-              {card}
-            </Link>
-          ) : (
-            <div key={label}>{card}</div>
-          );
-        })}
+          </Link>
+        ))}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">পরবর্তী ধাপ</CardTitle>
-          <CardDescription>
-            Phase 3 সম্পন্ন — প্রজেক্ট/ইউনিট CRUD, ফেজ টেমপ্লেট ও নির্মাণ টাইমলাইন কাজ করছে।
-            পেমেন্ট প্ল্যান ও অ্যাকাউন্টস মডিউল Phase 4 এ যোগ হবে (<code>02_BUILD_PLAN.md</code>)।
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      {/* PRD সেকশন ৫.৭ — Sales funnel, project progress ও collected vs receivable */}
+      <DashboardCharts funnelRange={funnelRange} />
     </div>
   );
 }

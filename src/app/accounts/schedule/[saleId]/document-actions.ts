@@ -111,6 +111,7 @@ export async function uploadSaleDocuments(
     userId: sale.customer.userId,
     type: 'DOCUMENT_UPLOADED',
     message: `${sale.unit.project.name} — ${sale.unit.unitNo}: ${saved.length} টি নতুন ডকুমেন্ট যোগ হয়েছে (${DOCUMENT_TYPE_LABEL[type]})`,
+    link: '/customer/documents',
   });
 
   revalidatePath(`/accounts/schedule/${saleId}`);

@@ -369,8 +369,19 @@ model Notification {
   userId     String
   type       String   // e.g. "PAYMENT_DUE", "PHASE_MILESTONE", "FOLLOW_UP_DUE"
   message    String
+  // ক্লিক করলে যেখানে যাবে — e.g. "/sales/leads/<id>", "/customer/payments"
+  link       String?
+  // পুনরাবৃত্ত (cron-চালিত) নোটিফিকেশনের ডিডুপ কী — e.g. "installment-due:<id>"।
+  // একই কী তে একই ইউজারকে দ্বিতীয়বার লেখা হয় না, তাই sweep রোজ চললেও একই খবর
+  // বারবার আসে না (`lib/notifications.ts`)। এককালীন ইভেন্টে null।
+  key        String?
   readStatus Boolean  @default(false)
   createdAt  DateTime @default(now())
+
+  // বেল ড্রপডাউন ও unread badge এর কুয়েরি
+  @@index([userId, readStatus, createdAt])
+  // ডিডুপ — `createMany({ skipDuplicates: true })` এই কনস্ট্রেইন্টের উপর কাজ করে
+  @@unique([userId, key])
 }
 
 model ActivityLog {

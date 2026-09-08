@@ -70,7 +70,12 @@ async function confirmSaleIfDraft(tx: Prisma.TransactionClient, sale: SaleForPla
 /** কাস্টমারকে জানানো — নিজের পোর্টালে শিডিউল দেখতে পাবেন (PRD সেকশন ৫.৪) */
 async function notifyCustomer(sale: SaleForPlan, message: string, actorId: string) {
   if (sale.customer.userId === actorId) return;
-  await notify({ userId: sale.customer.userId, type: 'PAYMENT_DUE', message });
+  await notify({
+    userId: sale.customer.userId,
+    type: 'PAYMENT_DUE',
+    message,
+    link: '/customer/payments',
+  });
 }
 
 /* --------------------------------------------------- template generate */

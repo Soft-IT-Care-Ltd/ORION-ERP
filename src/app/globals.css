@@ -35,6 +35,18 @@
     --input: 214 28% 88%;
     --ring: var(--orion-navy);
     --radius: 0.5rem;
+
+    /*
+     * Recharts সিরিজের রঙ (Admin ড্যাশবোর্ড — PRD সেকশন ৫.৭)। SVG এর
+     * presentation attribute এ `hsl(var(--chart-1))` লেখা যায়, তাই থিম বদলালে
+     * চার্টও সাথে সাথে বদলায় — কম্পোনেন্টে hex হার্ডকোড করতে হয় না।
+     * ক্রম: ব্র্যান্ড navy → gold, তারপর নিরপেক্ষ sky/emerald/alert।
+     */
+    --chart-1: var(--orion-navy);
+    --chart-2: var(--orion-gold);
+    --chart-3: 199 89% 40%;
+    --chart-4: 152 55% 34%;
+    --chart-5: 0 72% 45%;
   }
 
   .dark {
@@ -58,6 +70,13 @@
     --border: 214 26% 22%;
     --input: 214 26% 22%;
     --ring: var(--orion-gold);
+
+    /* navy ব্যাকগ্রাউন্ডে গাঢ় navy পড়া যায় না — সিরিজগুলো হালকা ও উজ্জ্বল */
+    --chart-1: 210 90% 70%;
+    --chart-2: 45.6 75% 60%;
+    --chart-3: 199 85% 62%;
+    --chart-4: 152 50% 55%;
+    --chart-5: 0 75% 66%;
   }
 }
 

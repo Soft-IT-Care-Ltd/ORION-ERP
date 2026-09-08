@@ -4,12 +4,14 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { canAccessRoute, homeForRole, ROLE_LABEL } from '@/lib/rbac';
 import { getPanel } from '@/lib/nav';
+import { loadNotifications, sweepIfStale } from '@/lib/notifications';
 import { Badge } from '@/components/ui/badge';
 import { OrionLockup } from '@/components/brand/orion-logo';
 import { NavLinks } from './nav-links';
 import { MobileNav } from './mobile-nav';
 import { UserMenu } from './user-menu';
 import { PanelSwitcher } from './panel-switcher';
+import { NotificationBell } from './notification-bell';
 import { AccountDisabled } from './account-disabled';
 
 /**
@@ -44,6 +46,12 @@ export async function PanelShell({
   const panel = getPanel(basePath);
   const isAdmin = user.role === 'ADMIN';
 
+  // সময়-নির্ভর রিমাইন্ডারগুলো (ফলো-আপ ওভারডিউ, কিস্তির due/overdue, ফেজ সম্পন্ন)
+  // মূলত `/api/cron/overdue` লেখে; cron সেট করা না থাকলেও যাতে হারিয়ে না যায়,
+  // এখানে ঘণ্টায় একবার ফলব্যাক sweep চলে — বিস্তারিত `lib/notifications.ts` এ।
+  await sweepIfStale();
+  const notifications = await loadNotifications(user.id);
+
   return (
     <div className="flex min-h-screen bg-muted/30">
       {/* ডেস্কটপ sidebar */}
@@ -69,6 +77,7 @@ export async function PanelShell({
             <Badge variant="secondary" className="hidden sm:inline-flex">
               {ROLE_LABEL[user.role]}
             </Badge>
+            <NotificationBell initial={notifications} />
             <UserMenu
               name={user.name}
               email={user.email}

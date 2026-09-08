@@ -304,6 +304,7 @@ export async function convertLeadToSale(input: {
       userIds: reviewers.map((r) => r.id),
       type: 'SALE_DRAFT_CREATED',
       message: `নতুন সেল (ড্রাফট) — ${lead.name} · ${unitName} · ${amountLabel} · পেমেন্ট প্ল্যান সেট করুন`,
+      link: `/accounts/schedule/${saleId}`,
     });
 
     revalidatePath('/sales/pipeline');

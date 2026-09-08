@@ -32,7 +32,7 @@ function revalidateProject(projectId?: string) {
 /** এই প্রজেক্টের দায়িত্বপ্রাপ্ত ইঞ্জিনিয়ারকে (থাকলে) জানানো */
 async function notifyEngineer(engineerId: string | null, message: string, actorId: string) {
   if (!engineerId || engineerId === actorId) return;
-  await notify({ userId: engineerId, type: 'PHASE_MILESTONE', message });
+  await notify({ userId: engineerId, type: 'PHASE_MILESTONE', message, link: '/engineer/sites' });
 }
 
 /* ------------------------------------------------------------- project */
