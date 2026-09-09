@@ -9,6 +9,7 @@ import { leadScope } from '@/lib/lead-access';
 import { cn } from '@/lib/utils';
 import { LEAD_STAGES, STAGE_ACCENT, STAGE_LABEL } from '@/lib/leads';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatCard } from '@/components/stat-card';
 import { startOfToday } from './leads/serialize';
 
 export const metadata = { title: 'সেলস ড্যাশবোর্ড' };
@@ -84,21 +85,9 @@ export default async function SalesDashboard() {
         </Link>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        {kpis.map(({ label, value, icon: Icon, tone }) => (
-          <Card key={label}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-                {label}
-              </CardTitle>
-              <Icon className={cn('h-4 w-4 text-muted-foreground', tone)} />
-            </CardHeader>
-            <CardContent>
-              <p className={cn('text-2xl font-semibold tabular-nums', value > 0 ? tone : '')}>
-                {value}
-              </p>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {kpis.map((kpi) => (
+          <StatCard key={kpi.label} {...kpi} />
         ))}
       </div>
 

@@ -122,7 +122,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="text-base">ফেজ টেমপ্লেট</CardTitle>
           <CardDescription>
             PRD সেকশন ৫.২ এর ডিফল্ট ৮টি ফেজ — প্রজেক্ট অনুযায়ী নাম, ক্রম ও সময়কাল বদলানো যায়।
@@ -130,7 +130,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
             অপরিবর্তিত থাকে।
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           <PhaseTemplateEditor
             projectId={project.id}
             initial={project.phaseTemplates.map((t) => ({

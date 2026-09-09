@@ -148,11 +148,11 @@ export default async function PaymentsPage() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="text-base">এখনই আদায়যোগ্য</CardTitle>
           <CardDescription>বকেয়া কিস্তি আগে, তারপর তারিখের ক্রমে</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {due.length === 0 ? (
             <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
               আগামী {UPCOMING_WINDOW_DAYS} দিনে আদায়যোগ্য কোনো কিস্তি নেই
@@ -170,11 +170,13 @@ export default async function PaymentsPage() {
                   <li
                     key={row.id}
                     className={cn(
-                      'flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3',
+                      'flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border p-3',
                       row.status === 'OVERDUE' ? 'border-destructive/30 bg-destructive/5' : null,
                     )}
                   >
-                    <div className="min-w-0 flex-1">
+                    {/* মোবাইলে তথ্য নিজের সারি পায় — নইলে `flex-1` অংশটি অঙ্ক ও
+                        বোতামের চাপে ~৫০px এ নেমে গিয়ে নাম/ইউনিট দুটোই "মোঃ র…" হয়ে যেত */}
+                    <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/accounts/schedule/${row.saleId}`}
@@ -191,11 +193,11 @@ export default async function PaymentsPage() {
                           {INSTALLMENT_STATUS_LABEL[row.status]}
                         </span>
                       </div>
-                      <p className="truncate text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground sm:truncate">
                         {row.unitLabel} · {row.label} · {format(row.dueDate, 'dd MMM yyyy')}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
                       <span className="font-semibold tabular-nums">{formatBDT(row.remaining)}</span>
                       <PaymentEntryButton
                         sales={sales}
@@ -214,11 +216,11 @@ export default async function PaymentsPage() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="text-base">সাম্প্রতিক পেমেন্ট</CardTitle>
           <CardDescription>শেষ {RECENT_LIMIT} টি রসিদ — প্রিন্ট/PDF করা যাবে</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
           {recentPayments.length === 0 ? (
             <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
               এখনো কোনো পেমেন্ট রেকর্ড হয়নি

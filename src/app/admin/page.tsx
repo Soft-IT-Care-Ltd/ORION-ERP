@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Building2, CalendarClock, KanbanSquare, Users, Wallet } from 'lucide-react';
 import { loadDashboardStats } from '@/lib/report-data';
 import { parseFunnelRange } from '@/lib/reports';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatCard } from '@/components/stat-card';
 import { DashboardCharts } from './dashboard';
 
 export const metadata = { title: 'অ্যাডমিন ড্যাশবোর্ড' };
@@ -26,7 +26,7 @@ export default async function AdminDashboard({
       icon: CalendarClock,
       href: '/sales/pipeline',
       // শূন্য না হলে সংখ্যাটা লাল — এগুলোতেই আজ হাত দিতে হবে (PRD সেকশন ৫.৬)
-      alert: stats.overdueFollowUps > 0,
+      tone: 'text-destructive',
     },
   ];
 
@@ -37,21 +37,9 @@ export default async function AdminDashboard({
         <p className="text-sm text-muted-foreground">সিস্টেমের সারসংক্ষেপ ও রিপোর্ট</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {cards.map(({ label, value, icon: Icon, href, alert }) => (
-          <Link key={label} href={href}>
-            <Card className="h-full transition-colors hover:bg-muted/50">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className={`text-2xl font-semibold ${alert ? 'text-destructive' : ''}`}>
-                  {value}
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {cards.map((card) => (
+          <StatCard key={card.label} {...card} />
         ))}
       </div>
 

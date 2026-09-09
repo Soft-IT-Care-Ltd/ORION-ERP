@@ -7,6 +7,7 @@ import { getAuthorizedUser } from '@/lib/guards';
 import { phaseProgressSelect, projectScope, unitScope } from '@/lib/project-access';
 import { computePhaseStatus, summarizePhases } from '@/lib/phases';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatCard } from '@/components/stat-card';
 import { PhaseProgressBar, PhaseUpdateLog } from '@/components/phase-timeline';
 
 export const metadata = { title: 'সাইট ড্যাশবোর্ড' };
@@ -70,7 +71,12 @@ export default async function EngineerDashboard() {
   const stats = [
     { label: 'অ্যাসাইন করা প্রজেক্ট', value: projects.length, icon: Building2 },
     { label: 'ইউনিট', value: units.length, icon: HardHat },
-    { label: 'বিলম্বিত ফেজ', value: delayedPhaseCount, icon: AlertTriangle, alert: true },
+    {
+      label: 'বিলম্বিত ফেজ',
+      value: delayedPhaseCount,
+      icon: AlertTriangle,
+      tone: 'text-destructive',
+    },
     { label: 'সম্পন্ন ইউনিট', value: doneUnits.length, icon: ListChecks },
   ];
 
@@ -82,30 +88,8 @@ export default async function EngineerDashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, alert }) => (
-          <Card key={label}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
-                {label}
-              </CardTitle>
-              <Icon
-                className={
-                  alert && value > 0 ? 'h-4 w-4 text-destructive' : 'h-4 w-4 text-muted-foreground'
-                }
-              />
-            </CardHeader>
-            <CardContent>
-              <p
-                className={
-                  alert && value > 0
-                    ? 'text-2xl font-semibold text-destructive'
-                    : 'text-2xl font-semibold'
-                }
-              >
-                {value}
-              </p>
-            </CardContent>
-          </Card>
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
         ))}
       </div>
 
