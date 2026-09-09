@@ -17,6 +17,8 @@ import {
   MAX_UPLOAD_BYTES,
   UPLOAD_ACCEPT,
 } from '@/lib/upload-limits';
+import { validate } from '@/lib/validations/form';
+import { uploadDocumentSchema } from '@/lib/validations/lead-base';
 import { uploadLeadDocuments } from '../actions';
 
 /**
@@ -75,10 +77,22 @@ export function DocumentUploadForm({ leadId }: { leadId: string }) {
     }
 
     const form = new FormData(event.currentTarget);
+    const fields = {
+      leadId,
+      fileType: String(form.get('fileType') ?? ''),
+      description: String(form.get('description') ?? ''),
+    };
+
+    // ফাইলগুলো তোলার আগেই মেটাডেটা যাচাই — কয়েক MB পাঠানোর পর ফর্ম ভুল বলাটা অপচয়
+    const check = validate(uploadDocumentSchema, fields);
+    if (!check.ok) {
+      setError(Object.values(check.fieldErrors)[0] ?? check.message);
+      toast.error(check.message);
+      return;
+    }
+
     const payload = new FormData();
-    payload.set('leadId', leadId);
-    payload.set('fileType', String(form.get('fileType') ?? ''));
-    payload.set('description', String(form.get('description') ?? ''));
+    for (const [key, value] of Object.entries(fields)) payload.set(key, value);
     for (const file of files) {
       payload.append('files', file);
       // multipart এর filename হেডার latin-1 হিসেবে ডিকোড হয় — বাংলা নাম তখন

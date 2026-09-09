@@ -10,8 +10,10 @@ import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action
 import { DEFAULT_PHASE_TEMPLATE, planPhaseDates } from '@/lib/phases';
 import {
   applyTemplateSchema,
+  projectIdSchema,
   savePhaseTemplateSchema,
   unitSchema,
+  unitIdSchema,
   updateProjectSchema,
   updateUnitSchema,
   projectSchema,
@@ -147,8 +149,14 @@ export async function deleteProject(input: { id: string }): Promise<ActionResult
   const admin = await getAuthorizedUser('project:manage');
   if (!admin) return FORBIDDEN;
 
+  // server action সরাসরি ডাকা যায় — id টাও যাচাই করে তবেই কুয়েরি
+  const parsed = projectIdSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: 'ইনপুট সঠিক নয়', fieldErrors: zodErrors(parsed.error) };
+  }
+
   const project = await prisma.project.findUnique({
-    where: { id: input.id },
+    where: { id: parsed.data.id },
     select: {
       id: true,
       name: true,
@@ -347,8 +355,13 @@ export async function deleteUnit(input: { id: string }): Promise<ActionResult> {
   const admin = await getAuthorizedUser('project:manage');
   if (!admin) return FORBIDDEN;
 
+  const parsed = unitIdSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: 'ইনপুট সঠিক নয়', fieldErrors: zodErrors(parsed.error) };
+  }
+
   const unit = await prisma.unit.findUnique({
-    where: { id: input.id },
+    where: { id: parsed.data.id },
     select: {
       id: true,
       unitNo: true,

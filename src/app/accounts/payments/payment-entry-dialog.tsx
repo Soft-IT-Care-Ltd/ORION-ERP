@@ -25,6 +25,8 @@ import {
   PAYMENT_METHOD_LABEL,
 } from '@/lib/payments';
 import { formatBDT } from '@/lib/utils';
+import { validate } from '@/lib/validations/form';
+import { paymentEntrySchema } from '@/lib/validations/payment';
 import { listPayableInstallments, recordPayment, type PayableInstallment } from './actions';
 
 /**
@@ -171,15 +173,17 @@ export function PaymentEntryDialog({
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const input = { installmentId, amountReceived: amount, method, receiptNo, note, paidAt };
+    const check = validate(paymentEntrySchema, input);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
+
     setPending(true);
-    const result = await recordPayment({
-      installmentId,
-      amountReceived: amount,
-      method,
-      receiptNo,
-      note,
-      paidAt,
-    });
+    const result = await recordPayment(input);
     setPending(false);
 
     if (!result.ok) {

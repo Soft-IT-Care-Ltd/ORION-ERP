@@ -19,6 +19,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { PERCENT_OPTIONS } from '@/lib/phases';
 import { formatFileSize, IMAGE_ACCEPT, MAX_UPLOAD_BYTES } from '@/lib/upload-limits';
+import { validate } from '@/lib/validations/form';
+import { phaseUpdateSchema } from '@/lib/validations/project';
 import { submitPhaseUpdate } from './actions';
 
 const MAX_PHOTOS = 10;
@@ -101,11 +103,24 @@ export function PhaseUpdateDialog({ phase }: { phase: PhaseUpdateTarget }) {
     }
 
     const form = new FormData(event.currentTarget);
+    const fields = {
+      phaseId: phase.id,
+      percentComplete: String(percent),
+      note: String(form.get('note') ?? ''),
+      delayReason: String(form.get('delayReason') ?? ''),
+    };
+
+    // ছবিগুলো আপলোড শুরু হওয়ার আগেই টেক্সট ফিল্ডগুলো যাচাই — মোবাইল ডেটায়
+    // কয়েক MB পাঠিয়ে তারপর "নোট খুব বড়" শোনা বিরক্তিকর
+    const check = validate(phaseUpdateSchema, fields);
+    if (!check.ok) {
+      setError(Object.values(check.fieldErrors)[0] ?? check.message);
+      toast.error(check.message);
+      return;
+    }
+
     const payload = new FormData();
-    payload.set('phaseId', phase.id);
-    payload.set('percentComplete', String(percent));
-    payload.set('note', String(form.get('note') ?? ''));
-    payload.set('delayReason', String(form.get('delayReason') ?? ''));
+    for (const [key, value] of Object.entries(fields)) payload.set(key, value);
     for (const { file } of photos) {
       payload.append('photos', file);
       // বাংলা ফাইলনেম multipart হেডারে নষ্ট হয় — নামটি আলাদা ফিল্ডে একই ক্রমে

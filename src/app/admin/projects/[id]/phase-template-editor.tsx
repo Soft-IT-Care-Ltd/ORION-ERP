@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DEFAULT_PHASE_TEMPLATE, PHASE_NAME_BN } from '@/lib/phases';
+import { validate } from '@/lib/validations/form';
+import { savePhaseTemplateSchema } from '@/lib/validations/project';
 import { savePhaseTemplate } from '../actions';
 
 export type TemplateRow = { name: string; defaultDurationDays: string };
@@ -49,6 +51,14 @@ export function PhaseTemplateEditor({
   }
 
   async function onSave() {
+    const check = validate(savePhaseTemplateSchema, { projectId, phases: rows });
+    if (!check.ok) {
+      const message = Object.values(check.fieldErrors)[0] ?? check.message;
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
     setPending(true);
     const result = await savePhaseTemplate({ projectId, phases: rows });
     setPending(false);
@@ -70,24 +80,28 @@ export function PhaseTemplateEditor({
       <ol className="space-y-2">
         {rows.map((row, index) => (
           <li key={index} className="flex flex-wrap items-end gap-2 rounded-md border p-2 sm:flex-nowrap">
-            <span className="flex h-10 w-7 shrink-0 items-center justify-center text-sm font-semibold text-muted-foreground">
-              {index + 1}
-            </span>
+            {/* ক্রম + নাম একসঙ্গে — মোবাইলে এরা পুরো সারি নেয়, নইলে নামের ঘরটি
+                ~১৫০px এ নেমে "Land Acquisi" এর মতো কাটা দেখাত */}
+            <div className="flex w-full min-w-0 items-end gap-2 sm:w-auto sm:flex-1">
+              <span className="flex h-10 w-7 shrink-0 items-center justify-center text-sm font-semibold text-muted-foreground">
+                {index + 1}
+              </span>
 
-            <div className="min-w-0 flex-1 space-y-1">
-              <Label htmlFor={`phase-name-${index}`} className="sr-only">
-                ফেজ {index + 1} এর নাম
-              </Label>
-              <Input
-                id={`phase-name-${index}`}
-                value={row.name}
-                onChange={(event) => update(index, { name: event.target.value })}
-                placeholder="ফেজের নাম"
-                autoComplete="off"
-              />
-              {PHASE_NAME_BN[row.name] ? (
-                <p className="text-xs text-muted-foreground">{PHASE_NAME_BN[row.name]}</p>
-              ) : null}
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label htmlFor={`phase-name-${index}`} className="sr-only">
+                  ফেজ {index + 1} এর নাম
+                </Label>
+                <Input
+                  id={`phase-name-${index}`}
+                  value={row.name}
+                  onChange={(event) => update(index, { name: event.target.value })}
+                  placeholder="ফেজের নাম"
+                  autoComplete="off"
+                />
+                {PHASE_NAME_BN[row.name] ? (
+                  <p className="text-xs text-muted-foreground">{PHASE_NAME_BN[row.name]}</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="w-28 shrink-0 space-y-1">
@@ -112,7 +126,7 @@ export function PhaseTemplateEditor({
               </div>
             </div>
 
-            <div className="flex shrink-0 gap-1">
+            <div className="ml-auto flex shrink-0 gap-1">
               <Button
                 type="button"
                 variant="ghost"

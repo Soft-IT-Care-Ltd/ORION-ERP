@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ROLES, ROLE_LABEL } from '@/lib/rbac';
+import { validateForm } from '@/lib/validations/form';
+import { createUserSchema, updateUserSchema } from '@/lib/validations/user';
 import { createUser, updateUser } from './actions';
 
 export type EditableUser = {
@@ -61,6 +63,14 @@ export function UserFormDialog({
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    // সার্ভারে যাওয়ার আগে একই স্কিমা ব্রাউজারেই — ভুল ইনপুটে রাউন্ড-ট্রিপ বাঁচে
+    const check = validateForm(isEdit ? updateUserSchema : createUserSchema, formData);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = isEdit ? await updateUser(formData) : await createUser(formData);

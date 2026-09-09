@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { validate } from '@/lib/validations/form';
+import { applyTemplateSchema } from '@/lib/validations/project';
 import { applyTemplateToUnits } from '../actions';
 
 /**
@@ -40,6 +42,12 @@ export function ApplyTemplateButton({
   const [pending, setPending] = useState(false);
 
   async function onApply() {
+    const check = validate(applyTemplateSchema, { projectId, startDate });
+    if (!check.ok) {
+      toast.error(Object.values(check.fieldErrors)[0] ?? check.message);
+      return;
+    }
+
     setPending(true);
     const result = await applyTemplateToUnits({ projectId, startDate });
     setPending(false);

@@ -1,0 +1,298 @@
+/**
+ * Zod স্কিমাগুলোর দ্রুত যাচাই — `npm run test:validations`
+ *
+ * ফাইলটি ইচ্ছে করেই `.mts` — `libphonenumber-js` এর CJS বিল্ড tsx এর নিচে
+ * নিজের metadata JSON লোড করতে পারে না (ESM বিল্ডটি পারে)। অ্যাপে সমস্যা নেই,
+ * সেখানে Next নিজেই বান্ডল করে।
+ *
+ * টেস্ট ফ্রেমওয়ার্ক ছাড়াই চলে (tsx + node:assert), কারণ এখানে দরকার শুধু
+ * বিশুদ্ধ ফাংশনের আচরণ পরীক্ষা — ডাটাবেস বা ব্রাউজার লাগে না। পুরো ফ্লো এর
+ * ম্যানুয়াল ধাপগুলো `TESTING.md` এ।
+ *
+ * নিয়ম: প্রতিটি স্কিমার (ক) একটি বৈধ ইনপুট পাস করে, (খ) যে নিয়মটির জন্য
+ * স্কিমাটি লেখা হয়েছে সেটি ভাঙলে ঠিক ওই ফিল্ডেই এরর আসে।
+ */
+
+import assert from 'node:assert/strict';
+
+// namespace import — tsx স্কিমা ফাইলগুলো CJS এ নামায়, তাই ESM এর named-export
+// ডিটেকশন সব নাম খুঁজে পায় না; পুরো namespace নিয়ে `mod()` দিয়ে খুলে নেওয়া হয়
+import * as formNs from '../src/lib/validations/form';
+import * as commonNs from '../src/lib/validations/common';
+import * as userNs from '../src/lib/validations/user';
+import * as leadBaseNs from '../src/lib/validations/lead-base';
+import * as projectNs from '../src/lib/validations/project';
+import * as paymentNs from '../src/lib/validations/payment';
+import * as saleNs from '../src/lib/validations/sale';
+import * as documentNs from '../src/lib/validations/document';
+
+/** CJS ইন্টারঅপ — আসল exports গুলো `default` এর ভেতরে পড়ে যায় */
+function mod<T>(ns: T): T {
+  return ((ns as { default?: T }).default ?? ns) as T;
+}
+
+const form = mod(formNs);
+const common = mod(commonNs);
+const user = mod(userNs);
+const leadBase = mod(leadBaseNs);
+const project = mod(projectNs);
+const payment = mod(paymentNs);
+const sale = mod(saleNs);
+const document = mod(documentNs);
+
+const { formValues, validate } = form;
+const { parseLocalDate } = common;
+const { createUserSchema, resetPasswordSchema, updateUserSchema } = user;
+const { leadFormSchema, changeStageSchema, addNoteSchema } = leadBase;
+const { projectSchema, unitSchema, phaseUpdateSchema, savePhaseTemplateSchema } = project;
+const { generatePlanSchema, paymentEntrySchema, saveScheduleSchema } = payment;
+const { convertLeadSchema } = sale;
+const { uploadSaleDocumentSchema } = document;
+
+let passed = 0;
+const failures: string[] = [];
+
+function test(name: string, fn: () => void) {
+  try {
+    fn();
+    passed += 1;
+  } catch (error) {
+    failures.push(`${name}\n    ${(error as Error).message.split('\n')[0]}`);
+  }
+}
+
+/** স্কিমাটি পাস করবে — এবং parse করা মান ফেরত দেবে */
+function ok<T>(schema: { safeParse: (v: unknown) => { success: boolean; data?: T; error?: unknown } }, input: unknown): T {
+  const result = schema.safeParse(input);
+  assert.equal(result.success, true, `পাস করার কথা ছিল: ${JSON.stringify(result.error ?? '')}`);
+  return result.data as T;
+}
+
+/** স্কিমাটি ঠিক `field` ফিল্ডে ব্যর্থ হবে */
+function failsOn(schema: { safeParse: (v: unknown) => { success: boolean } }, input: unknown, field: string) {
+  const result = validate(schema as never, input);
+  assert.equal(result.ok, false, `ব্যর্থ হওয়ার কথা ছিল (${field})`);
+  if (!result.ok) {
+    assert.ok(
+      field in result.fieldErrors,
+      `"${field}" এ এরর আশা করা হয়েছিল, পাওয়া গেছে: ${Object.keys(result.fieldErrors).join(', ')}`,
+    );
+  }
+}
+
+/* ------------------------------------------------------------- common */
+
+test('parseLocalDate — local midnight, UTC শিফট নয়', () => {
+  const date = parseLocalDate('2026-01-05')!;
+  assert.equal(date.getFullYear(), 2026);
+  assert.equal(date.getMonth(), 0);
+  assert.equal(date.getDate(), 5);
+  assert.equal(date.getHours(), 0);
+});
+
+test('parseLocalDate — রোল-ওভার তারিখ বাতিল', () => {
+  assert.equal(parseLocalDate('2026-02-31'), undefined);
+  assert.equal(parseLocalDate('2026-13-01'), undefined);
+  assert.equal(parseLocalDate('not-a-date'), undefined);
+});
+
+test('formValues — FormData → object, ফাইল বাদ', () => {
+  const fd = new FormData();
+  fd.set('name', 'Orion Green');
+  fd.append('tag', 'a');
+  fd.append('tag', 'b');
+  fd.set('file', new File(['x'], 'x.pdf'));
+  const values = formValues(fd);
+  assert.deepEqual(values, { name: 'Orion Green', tag: ['a', 'b'] });
+});
+
+/* --------------------------------------------------------------- user */
+
+test('createUser — বৈধ ইনপুট', () => {
+  const data = ok(createUserSchema, {
+    name: '  Sohel Rana ',
+    email: 'Sales@Orion.com',
+    phone: '01711223344',
+    role: 'MARKETING',
+    password: 'Orion@1234',
+  });
+  assert.equal(data.name, 'Sohel Rana', 'trim হওয়ার কথা');
+  assert.equal(data.email, 'sales@orion.com', 'lowercase হওয়ার কথা');
+});
+
+test('createUser — ছোট পাসওয়ার্ড আটকায়', () => {
+  failsOn(createUserSchema, { name: 'ক খ', email: 'a@b.com', role: 'ADMIN', password: 'short' }, 'password');
+});
+
+test('createUser — ভুল ফোন ফরম্যাট আটকায়', () => {
+  failsOn(createUserSchema, { name: 'ক খ', email: 'a@b.com', phone: '0171122', role: 'ADMIN', password: 'Orion@1234' }, 'phone');
+});
+
+test('updateUser — id ছাড়া চলবে না', () => {
+  failsOn(updateUserSchema, { id: '', name: 'ক খ', email: 'a@b.com', role: 'ADMIN' }, 'id');
+});
+
+test('resetPassword — ৮ অক্ষরের কম নয়', () => {
+  failsOn(resetPasswordSchema, { id: 'u1', password: '1234567' }, 'password');
+});
+
+/* --------------------------------------------------------------- lead */
+
+const validLead = {
+  name: 'মোঃ রফিকুল ইসলাম',
+  phoneCountry: 'AE',
+  phoneNumber: '501234501',
+  residenceCountry: 'AE',
+  email: '',
+  source: 'FACEBOOK_ADS',
+  budgetMin: '4500000',
+  budgetMax: '5500000',
+};
+
+test('lead (client) — বৈধ ইনপুট, খালি ইমেইল undefined', () => {
+  const data = ok(leadFormSchema, validLead);
+  assert.equal(data.email, undefined);
+  assert.equal(data.budgetMin, 4500000);
+});
+
+test('lead (client) — উল্টো বাজেট রেঞ্জ আটকায়', () => {
+  failsOn(leadFormSchema, { ...validLead, budgetMin: '9000000', budgetMax: '1000000' }, 'budgetMax');
+});
+
+test('lead (client) — নাম/নম্বর ছাড়া শুধু সম্পর্ক আটকায়', () => {
+  failsOn(leadFormSchema, { ...validLead, localContactRelation: 'ভাই' }, 'localContactName');
+});
+
+test('lead (client) — অক্ষরওয়ালা ফোন নম্বর আটকায়', () => {
+  failsOn(leadFormSchema, { ...validLead, phoneNumber: 'abcdefgh' }, 'phoneNumber');
+});
+
+/**
+ * সার্ভারের লিড স্কিমা (`validations/lead.ts`) libphonenumber দিয়ে নম্বরটি
+ * সত্যিই ওই দেশের কিনা দেখে ও E.164 তে নামায়।
+ *
+ * এখানে সেটি চালানো যায় না: `libphonenumber-js` এর CJS বিল্ড tsx এর নিচে নিজের
+ * metadata JSON লোড করতে পারে না (Next এর বান্ডলে সমস্যা নেই, অ্যাপে কাজ করে)।
+ * তাই ক্লায়েন্ট-সার্ভার ভাগটুকু এখানে যাচাই করা হয় — ব্রাউজারের স্কিমা কেবল
+ * *গঠন* দেখে, দেশভিত্তিক যাচাই সার্ভারের কাজ। আসল E.164 রূপান্তরের ধাপটি
+ * `TESTING.md` এর ধাপ ২ এ ম্যানুয়ালি দেখা হয়।
+ */
+test('lead (client) — গঠন ঠিক থাকলে ছেড়ে দেয়, দেশ-যাচাই সার্ভারের কাজ', () => {
+  // বাংলাদেশের কোনো বৈধ নম্বর নয়, তবু গঠনগতভাবে নম্বরের মতো — client পাস করায়
+  ok(leadFormSchema, { ...validLead, phoneCountry: 'BD', phoneNumber: '1234567' });
+});
+
+test('changeStage — LOST এ কারণ বাধ্যতামূলক', () => {
+  failsOn(changeStageSchema, { id: 'l1', stage: 'LOST' }, 'lostReason');
+  failsOn(changeStageSchema, { id: 'l1', stage: 'LOST', lostReason: 'যা খুশি' }, 'lostReason');
+  ok(changeStageSchema, { id: 'l1', stage: 'LOST', lostReason: 'Price too high' });
+  ok(changeStageSchema, { id: 'l1', stage: 'NEGOTIATION' });
+});
+
+test('addNote — খুব ছোট নোট আটকায়', () => {
+  failsOn(addNoteSchema, { id: 'l1', note: 'x' }, 'note');
+});
+
+/* ------------------------------------------------------------ project */
+
+test('project — startDate খালি হলে null', () => {
+  const data = ok(projectSchema, { name: 'Orion Green', location: 'খুলনা', startDate: '', engineerId: '' });
+  assert.equal(data.startDate, null);
+  assert.equal(data.engineerId, null);
+});
+
+test('project — অবৈধ তারিখ আটকায়', () => {
+  failsOn(projectSchema, { name: 'Orion Green', location: 'খুলনা', startDate: '2026-02-31' }, 'startDate');
+});
+
+test('unit — কমা সহ মূল্য চলে, ঋণাত্মক নয়', () => {
+  const data = ok(unitSchema, { projectId: 'p1', unitNo: 'A-1', sizeSqft: '1,250', price: '45,00,000', status: 'AVAILABLE' });
+  assert.equal(data.price, 4500000);
+  assert.equal(data.sizeSqft, 1250);
+  failsOn(unitSchema, { projectId: 'p1', unitNo: 'A-1', price: '-5', status: 'AVAILABLE' }, 'price');
+});
+
+test('unit — অস্বাভাবিক বড় মূল্য আটকায়', () => {
+  failsOn(unitSchema, { projectId: 'p1', unitNo: 'A-1', price: '99999999999999', status: 'AVAILABLE' }, 'price');
+});
+
+test('phaseUpdate — % শুধু ০/২৫/৫০/৭৫/১০০', () => {
+  ok(phaseUpdateSchema, { phaseId: 'ph1', percentComplete: '75' });
+  failsOn(phaseUpdateSchema, { phaseId: 'ph1', percentComplete: '63' }, 'percentComplete');
+});
+
+test('phaseTemplate — একই নাম দুবার আটকায়', () => {
+  failsOn(
+    savePhaseTemplateSchema,
+    { projectId: 'p1', phases: [{ name: 'Foundation', defaultDurationDays: '30' }, { name: 'foundation', defaultDurationDays: '20' }] },
+    'phases',
+  );
+});
+
+/* ------------------------------------------------------------ payment */
+
+const validPlan = {
+  saleId: 's1',
+  bookingDate: '2026-01-05',
+  bookingPercent: '10',
+  downPaymentPercent: '15',
+  downPaymentDays: '30',
+  agreementPercent: '15',
+  agreementDate: '2026-02-05',
+  monthlyCount: '20',
+  monthlyPercent: '2.5',
+  firstInstallmentDate: '2026-03-05',
+  handoverDate: '2027-11-05',
+};
+
+test('generatePlan — বৈধ টেমপ্লেট', () => {
+  const data = ok(generatePlanSchema, validPlan);
+  assert.equal(data.bookingPercent, 10);
+  assert.ok(data.bookingDate instanceof Date);
+});
+
+test('generatePlan — শতাংশের যোগফল ১০০% ছুঁলে আটকায়', () => {
+  failsOn(generatePlanSchema, { ...validPlan, monthlyPercent: '5' }, 'monthlyPercent');
+});
+
+test('saveSchedule — খালি তালিকা আটকায়, অঙ্ক রাউন্ড হয়', () => {
+  failsOn(saveScheduleSchema, { saleId: 's1', installments: [] }, 'installments');
+  const data = ok(saveScheduleSchema, {
+    saleId: 's1',
+    installments: [{ label: 'Booking Money', dueDate: '2026-01-05', amount: '450000.6' }],
+  });
+  assert.equal(data.installments[0].amount, 450001);
+});
+
+test('paymentEntry — কিস্তি ও ধনাত্মক অঙ্ক লাগে', () => {
+  failsOn(paymentEntrySchema, { installmentId: '', amountReceived: '1000', method: 'CASH', paidAt: '2026-01-05' }, 'installmentId');
+  failsOn(paymentEntrySchema, { installmentId: 'i1', amountReceived: '0', method: 'CASH', paidAt: '2026-01-05' }, 'amountReceived');
+  failsOn(paymentEntrySchema, { installmentId: 'i1', amountReceived: '1000', method: 'PAYPAL', paidAt: '2026-01-05' }, 'method');
+  const data = ok(paymentEntrySchema, { installmentId: 'i1', amountReceived: '1,00,000', method: 'BKASH', receiptNo: '  ', paidAt: '2026-01-05' });
+  assert.equal(data.amountReceived, 100000);
+  assert.equal(data.receiptNo, undefined, 'শুধু স্পেস হলে undefined — server নিজে রসিদ নম্বর বানাবে');
+});
+
+/* -------------------------------------------------------- sale / docs */
+
+test('convertLead — ইউনিট ও মূল্য লাগে, ইমেইল ঐচ্ছিক', () => {
+  failsOn(convertLeadSchema, { leadId: 'l1', unitId: '', totalAmount: '4500000' }, 'unitId');
+  failsOn(convertLeadSchema, { leadId: 'l1', unitId: 'u1', totalAmount: '4500000', customerEmail: 'not-an-email' }, 'customerEmail');
+  const data = ok(convertLeadSchema, { leadId: 'l1', unitId: 'u1', totalAmount: '45,00,000', customerEmail: '' });
+  assert.equal(data.totalAmount, 4500000);
+  assert.equal(data.customerEmail, undefined);
+});
+
+test('saleDocument — তালিকার বাইরের ধরন আটকায়', () => {
+  failsOn(uploadSaleDocumentSchema, { saleId: 's1', type: 'Random Paper' }, 'type');
+  ok(uploadSaleDocumentSchema, { saleId: 's1', type: 'Sale Agreement', description: '  ' });
+});
+
+/* -------------------------------------------------------------- ফলাফল */
+
+console.log(`\n✔ ${passed} টি যাচাই পাস করেছে`);
+if (failures.length > 0) {
+  console.error(`\n✘ ${failures.length} টি ব্যর্থ:\n`);
+  for (const failure of failures) console.error(`  • ${failure}\n`);
+  process.exit(1);
+}

@@ -1,66 +1,43 @@
 import { z } from 'zod';
 import { UnitStatus } from '@prisma/client';
 import { PERCENT_OPTIONS } from '@/lib/phases';
+import {
+  id,
+  integerBetween,
+  nullableDate,
+  nullableId,
+  optionalText,
+  positiveAmount,
+  requiredText,
+} from './common';
 
 /**
  * Project, Unit, PhaseTemplate ও PhaseUpdate এর ইনপুট যাচাই — PRD সেকশন ৫.২।
+ * ফর্ম (client) ও server action — দুই জায়গাতেই এই স্কিমাই চলে।
  */
 
-/** ভুল করে অতিরিক্ত শূন্য বসানো ঠেকাতে (১০০ কোটি) — `validations/sale.ts` এর মতোই */
-const MAX_UNIT_PRICE = 10_000_000_000;
-
-/** খালি স্ট্রিং → undefined (ঐচ্ছিক টেক্সট ফিল্ড) */
-const optionalText = (max: number) =>
-  z
-    .string()
-    .optional()
-    .transform((v) => {
-      const trimmed = v?.trim();
-      return trimmed ? trimmed : undefined;
-    })
-    .refine((v) => v === undefined || v.length <= max, `সর্বোচ্চ ${max} অক্ষর`);
-
-/** "yyyy-MM-dd" (date input) → local midnight Date; খালি হলে null */
-const optionalDate = z
-  .string()
-  .optional()
-  .transform((v) => {
-    const trimmed = v?.trim();
-    if (!trimmed) return null;
-    // `new Date("2026-01-05")` UTC ধরে — দেশভেদে একদিন পিছিয়ে যেত, তাই হাতে ভাঙা
-    const [y, m, d] = trimmed.split('-').map(Number);
-    if (!y || !m || !d) return undefined;
-    return new Date(y, m - 1, d);
-  })
-  .refine((v) => v !== undefined, 'সঠিক তারিখ দিন')
-  .transform((v) => v as Date | null);
-
-/** খালি স্ট্রিং → null (ঐচ্ছিক relation id) */
-const optionalId = z
-  .string()
-  .optional()
-  .transform((v) => (v?.trim() ? v.trim() : null));
-
-const amount = z
-  .union([z.string(), z.number()])
-  .transform((v) => (typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim())))
-  .refine((v) => Number.isFinite(v) && v > 0, 'সঠিক মূল্য দিন')
-  .refine((v) => !Number.isFinite(v) || v <= MAX_UNIT_PRICE, 'মূল্য অস্বাভাবিক বেশি — যাচাই করুন');
+const price = positiveAmount({
+  message: 'সঠিক মূল্য দিন',
+  maxMessage: 'মূল্য অস্বাভাবিক বেশি — যাচাই করুন',
+});
 
 /* ------------------------------------------------------------- project */
 
 export const projectSchema = z.object({
-  name: z.string().trim().min(2, 'প্রজেক্টের নাম দিন').max(120, 'নাম সর্বোচ্চ ১২০ অক্ষর'),
-  location: z.string().trim().min(2, 'অবস্থান দিন').max(180, 'অবস্থান সর্বোচ্চ ১৮০ অক্ষর'),
+  name: requiredText(2, 120, 'প্রজেক্টের নাম দিন'),
+  location: requiredText(2, 180, 'অবস্থান দিন'),
   description: optionalText(1000),
-  startDate: optionalDate,
-  engineerId: optionalId,
+  startDate: nullableDate,
+  engineerId: nullableId,
 });
 
-export const updateProjectSchema = projectSchema.extend({ id: z.string().min(1) });
+export const updateProjectSchema = projectSchema.extend({ id });
+
+export const projectIdSchema = z.object({ id });
 
 /* ---------------------------------------------------------------- unit */
 
+/** খালি → `null`; নইলে ধনাত্মক আয়তন */
 const sizeSqft = z
   .string()
   .optional()
@@ -74,28 +51,30 @@ const sizeSqft = z
   .transform((v) => v as number | null);
 
 export const unitSchema = z.object({
-  projectId: z.string().min(1),
-  unitNo: z.string().trim().min(1, 'ইউনিট নম্বর দিন').max(30, 'ইউনিট নম্বর সর্বোচ্চ ৩০ অক্ষর'),
+  projectId: id,
+  unitNo: requiredText(1, 30, 'ইউনিট নম্বর দিন'),
   sizeSqft,
-  price: amount,
-  status: z.nativeEnum(UnitStatus),
+  price,
+  status: z.nativeEnum(UnitStatus, {
+    errorMap: () => ({ message: 'স্ট্যাটাস নির্বাচন করুন' }),
+  }),
 });
 
-export const updateUnitSchema = unitSchema.extend({ id: z.string().min(1) });
+export const updateUnitSchema = unitSchema.extend({ id });
+
+export const unitIdSchema = z.object({ id });
 
 /* ------------------------------------------------------- phase template */
 
 const templateRow = z.object({
-  name: z.string().trim().min(2, 'ফেজের নাম দিন').max(120, 'নাম সর্বোচ্চ ১২০ অক্ষর'),
-  defaultDurationDays: z
-    .union([z.string(), z.number()])
-    .transform((v) => (typeof v === 'number' ? v : Number(String(v).trim() || '0')))
-    .refine((v) => Number.isInteger(v) && v >= 0 && v <= 3650, 'সময়কাল ০–৩৬৫০ দিনের মধ্যে দিন')
-    .transform((v) => (v > 0 ? v : null)),
+  name: requiredText(2, 120, 'ফেজের নাম দিন'),
+  defaultDurationDays: integerBetween(0, 3650, 'সময়কাল ০–৩৬৫০ দিনের মধ্যে দিন').transform((v) =>
+    v > 0 ? v : null,
+  ),
 });
 
 export const savePhaseTemplateSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: id,
   phases: z
     .array(templateRow)
     .min(1, 'অন্তত একটি ফেজ রাখতে হবে')
@@ -107,15 +86,15 @@ export const savePhaseTemplateSchema = z.object({
 });
 
 export const applyTemplateSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: id,
   /** না দিলে প্রজেক্টের startDate ব্যবহার হবে */
-  startDate: optionalDate,
+  startDate: nullableDate,
 });
 
 /* --------------------------------------------------------- phase update */
 
 export const phaseUpdateSchema = z.object({
-  phaseId: z.string().min(1),
+  phaseId: id,
   percentComplete: z
     .union([z.string(), z.number()])
     .transform((v) => (typeof v === 'number' ? v : Number(String(v).trim())))

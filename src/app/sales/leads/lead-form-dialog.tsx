@@ -20,6 +20,8 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { LEAD_SOURCES, LOCAL_CONTACT_RELATIONS, SOURCE_LABEL } from '@/lib/leads';
 import { COMMON_COUNTRIES, OTHER_COUNTRIES, OTHER_COUNTRY } from '@/lib/countries';
 import { PhoneInput } from '@/components/form/phone-input';
+import { validateForm } from '@/lib/validations/form';
+import { leadFormSchema, updateLeadFormSchema } from '@/lib/validations/lead-base';
 import { createLead, updateLead } from './actions';
 
 /** ফর্মের defaultValue হিসেবে বসানোর মতো (সব string) লিড রূপ */
@@ -85,6 +87,15 @@ export function LeadFormDialog({
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    // `lead-base` স্কিমা — ফোনের দেশভিত্তিক যাচাই (libphonenumber) সার্ভারে হয়,
+    // সেই ভারী লাইব্রেরিটি ক্লায়েন্ট bundle এ আনা হয় না
+    const check = validateForm(isEdit ? updateLeadFormSchema : leadFormSchema, formData);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = isEdit ? await updateLead(formData) : await createLead(formData);

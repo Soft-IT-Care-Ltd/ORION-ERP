@@ -7,6 +7,8 @@ import { Loader2, MessageSquarePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { validate } from '@/lib/validations/form';
+import { addNoteSchema } from '@/lib/validations/lead-base';
 import { addLeadNote } from '../actions';
 
 export function AddNoteForm({ leadId }: { leadId: string }) {
@@ -18,6 +20,13 @@ export function AddNoteForm({ leadId }: { leadId: string }) {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const note = String(new FormData(event.currentTarget).get('note') ?? '');
+
+    const check = validate(addNoteSchema, { id: leadId, note });
+    if (!check.ok) {
+      setError(check.fieldErrors.note ?? check.message);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = await addLeadNote({ id: leadId, note });

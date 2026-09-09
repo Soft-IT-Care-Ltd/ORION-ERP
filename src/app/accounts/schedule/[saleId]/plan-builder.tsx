@@ -27,7 +27,14 @@ import {
   type InstallmentView,
 } from '@/lib/payments';
 import { cn, formatBDT } from '@/lib/utils';
+import { validate, type ClientInvalid } from '@/lib/validations/form';
+import { generatePlanSchema, saveScheduleSchema } from '@/lib/validations/payment';
 import { generatePlanFromTemplate, saveSchedule } from '../actions';
+
+/** ফর্মে আলাদা field error দেখানোর জায়গা নেই — প্রথম মেসেজটিই toast এ যায় */
+function firstMessage(invalid: ClientInvalid) {
+  return Object.values(invalid.fieldErrors)[0] ?? invalid.message;
+}
 
 /**
  * PRD সেকশন ৫.৩ — Payment Plan Builder।
@@ -211,20 +218,17 @@ export function PlanBuilder({
   /* --------------------------------------------------------------- submit */
 
   async function onGenerate() {
+    const input = { saleId, ...tpl };
+
+    const check = validate(generatePlanSchema, input);
+    if (!check.ok) {
+      setConfirmOpen(false);
+      toast.error(firstMessage(check));
+      return;
+    }
+
     setPending(true);
-    const result = await generatePlanFromTemplate({
-      saleId,
-      bookingDate: tpl.bookingDate,
-      bookingPercent: tpl.bookingPercent,
-      downPaymentPercent: tpl.downPaymentPercent,
-      downPaymentDays: tpl.downPaymentDays,
-      agreementPercent: tpl.agreementPercent,
-      agreementDate: tpl.agreementDate,
-      monthlyCount: tpl.monthlyCount,
-      monthlyPercent: tpl.monthlyPercent,
-      firstInstallmentDate: tpl.firstInstallmentDate,
-      handoverDate: tpl.handoverDate,
-    });
+    const result = await generatePlanFromTemplate(input);
     setPending(false);
     setConfirmOpen(false);
 
@@ -238,8 +242,7 @@ export function PlanBuilder({
   }
 
   async function onSaveCustom() {
-    setPending(true);
-    const result = await saveSchedule({
+    const input = {
       saleId,
       installments: rows.map((row) => ({
         id: row.id,
@@ -247,7 +250,16 @@ export function PlanBuilder({
         dueDate: row.dueDate,
         amount: row.amount,
       })),
-    });
+    };
+
+    const check = validate(saveScheduleSchema, input);
+    if (!check.ok) {
+      toast.error(firstMessage(check));
+      return;
+    }
+
+    setPending(true);
+    const result = await saveSchedule(input);
     setPending(false);
 
     if (!result.ok) {

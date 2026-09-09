@@ -18,6 +18,8 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { ROLE_LABEL } from '@/lib/rbac';
+import { validateForm } from '@/lib/validations/form';
+import { projectSchema, updateProjectSchema } from '@/lib/validations/project';
 import { createProject, updateProject } from './actions';
 
 export type EngineerOption = { id: string; name: string; role: 'ENGINEER' | 'ADMIN' };
@@ -61,6 +63,13 @@ export function ProjectFormDialog({
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    const check = validateForm(isEdit ? updateProjectSchema : projectSchema, formData);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = isEdit ? await updateProject(formData) : await createProject(formData);

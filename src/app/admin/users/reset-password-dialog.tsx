@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { validateForm } from '@/lib/validations/form';
+import { resetPasswordSchema } from '@/lib/validations/user';
 import { resetPassword } from './actions';
 
 export function ResetPasswordDialog({
@@ -35,6 +37,13 @@ export function ResetPasswordDialog({
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    const check = validateForm(resetPasswordSchema, formData);
+    if (!check.ok) {
+      setError(check.fieldErrors.password ?? check.message);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = await resetPassword(formData);

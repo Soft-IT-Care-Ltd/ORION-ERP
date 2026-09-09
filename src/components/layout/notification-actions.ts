@@ -2,6 +2,7 @@
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { id as idSchema } from '@/lib/validations/common';
 import {
   loadNotifications,
   markAllAsRead,
@@ -40,7 +41,11 @@ export async function readNotification(id: string): Promise<NotificationFeed> {
   const userId = await currentUserId();
   if (!userId) return EMPTY;
 
-  await markAsRead(id, userId);
+  // ক্লায়েন্ট থেকে আসা কাঁচা id — Prisma তে বসানোর আগে যাচাই
+  const parsed = idSchema.safeParse(id);
+  if (!parsed.success) return loadNotifications(userId);
+
+  await markAsRead(parsed.data, userId);
   return loadNotifications(userId);
 }
 

@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { LEAD_STAGES, STAGE_LABEL } from '@/lib/leads';
+import { validate } from '@/lib/validations/form';
+import { changeStageSchema } from '@/lib/validations/lead-base';
 import { changeLeadStage } from '../actions';
 import {
   LeadFormDialog,
@@ -55,6 +57,13 @@ export function LeadDetailActions({
   useEffect(() => setSelected(stage), [stage]);
 
   async function save(next: LeadStage, lostReason?: string) {
+    const check = validate(changeStageSchema, { id: lead.id, stage: next, lostReason });
+    if (!check.ok) {
+      setSelected(stage);
+      toast.error(Object.values(check.fieldErrors)[0] ?? check.message);
+      return false;
+    }
+
     setPending(true);
     const result = await changeLeadStage({ id: lead.id, stage: next, lostReason });
     setPending(false);

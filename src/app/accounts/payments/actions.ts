@@ -10,7 +10,7 @@ import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action
 import { computeInstallmentStatus } from '@/lib/payments';
 import { markOverdueInstallments, nextReceiptNo } from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
-import { paymentEntrySchema } from '@/lib/validations/payment';
+import { paymentEntrySchema, saleIdSchema } from '@/lib/validations/payment';
 
 export type { ActionResult } from '@/lib/action-result';
 
@@ -228,8 +228,12 @@ export async function listPayableInstallments(
   const accounts = await getAuthorizedUser('payment:create');
   if (!accounts) return FORBIDDEN;
 
+  // `saleId` ক্লায়েন্ট থেকে আসা কাঁচা string — Prisma তে বসানোর আগে যাচাই
+  const parsed = saleIdSchema.safeParse({ saleId });
+  if (!parsed.success) return { ok: false, message: 'সেলটি শনাক্ত করা যায়নি' };
+
   const rows = await prisma.installment.findMany({
-    where: { paymentPlan: { saleId } },
+    where: { paymentPlan: { saleId: parsed.data.saleId } },
     select: {
       id: true,
       label: true,

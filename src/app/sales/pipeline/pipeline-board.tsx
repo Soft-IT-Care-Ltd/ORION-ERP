@@ -17,6 +17,8 @@ import {
 } from '@dnd-kit/core';
 import type { LeadStage } from '@prisma/client';
 import { LEAD_STAGES, STAGE_LABEL } from '@/lib/leads';
+import { validate } from '@/lib/validations/form';
+import { changeStageSchema } from '@/lib/validations/lead-base';
 import { changeLeadStage } from '../leads/actions';
 import {
   LeadFormDialog,
@@ -81,6 +83,14 @@ export function PipelineBoard({
 
   const applyStageChange = useCallback(
     async (lead: PipelineLead, stage: LeadStage, lostReason?: string) => {
+      // PRD সেকশন ৫.১ — Lost এ কারণ বাধ্যতামূলক; কার্ড সরানোর আগেই ধরা পড়ে,
+      // নইলে optimistic move টি করে আবার ফেরত নিতে হতো
+      const check = validate(changeStageSchema, { id: lead.id, stage, lostReason });
+      if (!check.ok) {
+        toast.error(Object.values(check.fieldErrors)[0] ?? check.message);
+        return false;
+      }
+
       const snapshot = items;
 
       setItems((current) =>

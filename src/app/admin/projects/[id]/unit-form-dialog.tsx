@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { UNIT_STATUS_LABEL } from '@/lib/sales';
+import { validateForm } from '@/lib/validations/form';
+import { unitSchema, updateUnitSchema } from '@/lib/validations/project';
 import { createUnit, updateUnit } from '../actions';
 
 export type EditableUnit = {
@@ -62,6 +64,13 @@ export function UnitFormDialog({
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+
+    const check = validateForm(isEdit ? updateUnitSchema : unitSchema, formData);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
 
     setPending(true);
     const result = isEdit ? await updateUnit(formData) : await createUnit(formData);

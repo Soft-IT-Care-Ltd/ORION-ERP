@@ -10,7 +10,7 @@ import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action
 import { generateSchedule } from '@/lib/payments';
 import { markOverdueInstallments } from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
-import { generatePlanSchema, saveScheduleSchema } from '@/lib/validations/payment';
+import { generatePlanSchema, saleIdSchema, saveScheduleSchema } from '@/lib/validations/payment';
 
 export type { ActionResult } from '@/lib/action-result';
 
@@ -312,7 +312,12 @@ export async function deletePlan(input: { saleId: string }): Promise<ActionResul
   const accounts = await getAuthorizedUser('paymentPlan:manage');
   if (!accounts) return FORBIDDEN;
 
-  const sale = await loadSaleForPlan(input.saleId);
+  const parsed = saleIdSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: 'ইনপুট সঠিক নয়', fieldErrors: zodErrors(parsed.error) };
+  }
+
+  const sale = await loadSaleForPlan(parsed.data.saleId);
   if (!sale?.paymentPlan) return NOT_FOUND;
 
   const paid = paidInstallments(sale);

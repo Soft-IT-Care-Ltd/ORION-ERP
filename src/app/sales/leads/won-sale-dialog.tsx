@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { UNIT_STATUS_LABEL } from '@/lib/sales';
+import { validate } from '@/lib/validations/form';
+import { convertLeadSchema } from '@/lib/validations/sale';
 import { convertLeadToSale } from './sale-actions';
 
 /** সেল কনফার্ম ডায়ালগের ইউনিট অপশন — দাম ও স্ট্যাটাস সহ (server এ ফরম্যাট করা) */
@@ -109,13 +111,22 @@ export function WonSaleDialog({
     if (!lead) return;
 
     const formData = new FormData(event.currentTarget);
-    setPending(true);
-    const result = await convertLeadToSale({
+    const input = {
       leadId: lead.id,
       unitId,
       totalAmount: amount,
       customerEmail: String(formData.get('customerEmail') ?? ''),
-    });
+    };
+
+    const check = validate(convertLeadSchema, input);
+    if (!check.ok) {
+      setErrors(check.fieldErrors);
+      toast.error(check.message);
+      return;
+    }
+
+    setPending(true);
+    const result = await convertLeadToSale(input);
     setPending(false);
 
     if (!result.ok) {
