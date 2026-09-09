@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["bom1"],
+  "crons": [
+    {
+      "path": "/api/cron/overdue",
+      "schedule": "0 19 * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/cron/overdue/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
