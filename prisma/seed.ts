@@ -19,23 +19,49 @@ import { buildProjectTitle } from '../src/lib/projects';
 import { computeInstallmentStatus, formatReceiptNo } from '../src/lib/payments';
 
 /**
- * ডেমো ডেটা — v2 (কনস্ট্রাকশন সার্ভিস মডেল)।
+ * সিড ডেটা — v2 (কনস্ট্রাকশন সার্ভিস মডেল)।
  *
- * যা তৈরি হয়:
- *   ১. পাঁচ রোলের ইউজার
- *   ২. গ্লোবাল ফেজ টেমপ্লেট (PRD সেকশন ৫.৪ এর ৭ ধাপ)
- *   ৩. বিভিন্ন প্রি-প্রজেক্ট স্টেজে লিড — কিছুতে চেকলিস্ট ও LedgerEntry সহ
- *   ৪. একটি Won লিড → Project (ফেজ + সাইট আপডেট + PaymentPlan + কিছু Payment)
+ * দুটি মোড:
+ *
+ * **ডেভেলপমেন্ট** (ডিফল্ট) — পাঁচ রোলের ইউজার, গ্লোবাল ফেজ টেমপ্লেট, বিভিন্ন
+ * প্রি-প্রজেক্ট স্টেজে ১৩টি লিড (চেকলিস্ট ও LedgerEntry সহ), আর একটি Won লিড →
+ * Project (ফেজ + সাইট আপডেট + PaymentPlan + কিছু Payment)।
+ *
+ * **প্রোডাকশন** (`SEED_DEMO=false`) — শুধু একজন অ্যাডমিন ও গ্লোবাল ফেজ টেমপ্লেট।
+ * বানানো লিড/প্রজেক্ট/পেমেন্ট লাইভ সিস্টেমে জঞ্জাল, আর শেয়ার্ড পাসওয়ার্ডে
+ * চারটি স্টাফ অ্যাকাউন্ট খুলে রাখা নিরাপত্তার ঝুঁকি — বাকি ইউজার অ্যাডমিন
+ * নিজে UI থেকে বানাবেন। ফেজ টেমপ্লেটটি ডেমো নয়, অপারেশনাল কনফিগ: Lead → Won
+ * কনভার্শনে ওখান থেকেই প্রজেক্টের ফেজগুলো কপি হয়, তাই দুই মোডেই তৈরি হয়।
  *
  * সিডটি বারবার চালানো নিরাপদ: প্রতিটি ধাপ আগে দেখে নেয় ডেটা আছে কি না।
  */
 
 const prisma = new PrismaClient();
 
-const password = process.env.SEED_PASSWORD ?? 'Orion@1234';
+/** `SEED_DEMO=false` দিলে ডেমো লিড/প্রজেক্ট ও স্টাফ অ্যাকাউন্টগুলো বাদ যায় */
+const seedDemo = process.env.SEED_DEMO !== 'false';
 
-const users: { name: string; email: string; phone: string; role: Role }[] = [
-  { name: 'Neshad Al Kafian', email: 'admin@orionbuilders.com', phone: '01700000001', role: Role.ADMIN },
+/** ডেমো অ্যাকাউন্টগুলোর জানা পাসওয়ার্ড — প্রোডাকশনে এটি ব্যবহার করা যাবে না */
+const DEMO_PASSWORD = 'Orion@1234';
+
+/** প্রোডাকশন অ্যাডমিনের পাসওয়ার্ড অন্তত এত অক্ষরের হতে হবে */
+const MIN_PROD_PASSWORD = 12;
+
+const password = process.env.SEED_PASSWORD ?? DEMO_PASSWORD;
+
+/**
+ * অ্যাডমিন — দুই মোডেই তৈরি হয়। প্রোডাকশনে পরিচয়টা env দিয়ে বদলানো যায়, যাতে
+ * ডেমো ইমেইল (`admin@orionbuilders.com`) লাইভ সিস্টেমে থেকে না যায়।
+ */
+const adminUser = {
+  name: process.env.ADMIN_NAME ?? 'Neshad Al Kafian',
+  email: process.env.ADMIN_EMAIL ?? 'admin@orionbuilders.com',
+  phone: process.env.ADMIN_PHONE ?? '01700000001',
+  role: Role.ADMIN,
+};
+
+/** শুধু ডেমো মোডে তৈরি হওয়া স্টাফ ও কাস্টমার অ্যাকাউন্ট */
+const demoUsers: { name: string; email: string; phone: string; role: Role }[] = [
   { name: 'Sohel Rana', email: 'sales@orionbuilders.com', phone: '01700000002', role: Role.MARKETING },
   { name: 'Engr. Tanvir Hasan', email: 'engineer@orionbuilders.com', phone: '01700000003', role: Role.ENGINEER },
   { name: 'Farhana Akter', email: 'accounts@orionbuilders.com', phone: '01700000004', role: Role.ACCOUNTS },
@@ -860,12 +886,32 @@ async function seedProject(marketingId: string, accountsId: string, engineerId: 
 /* ─────────────────────────────────────────────────────────────── main */
 
 async function main() {
+  // প্রোডাকশন মোডে দুর্বল পাসওয়ার্ড দিয়ে অ্যাডমিন খুলে ফেলা আটকানো।
+  //
+  // শুধু "env সেট আছে কি না" দেখা যথেষ্ট নয়: `@prisma/client` নিজে থেকেই `.env`
+  // লোড করে, তাই ডেভ মেশিনের `SEED_PASSWORD=Orion@1234` নীরবে ঢুকে যেতে পারে।
+  // তাই মানটাই যাচাই করা হয় — জানা ডেমো পাসওয়ার্ড ও খুব ছোট পাসওয়ার্ড বাতিল।
+  if (!seedDemo) {
+    if (password === DEMO_PASSWORD) {
+      throw new Error(
+        'SEED_DEMO=false এ ডেমো পাসওয়ার্ড ব্যবহার করা যাবে না — কমান্ডে ' +
+          'SEED_PASSWORD="<শক্ত-পাসওয়ার্ড>" দিন (.env এর মানটি উপেক্ষিত নয়, ' +
+          'তাই প্রয়োজনে সেটিও বদলান)',
+      );
+    }
+    if (password.length < MIN_PROD_PASSWORD) {
+      throw new Error(
+        `SEED_DEMO=false এ SEED_PASSWORD অন্তত ${MIN_PROD_PASSWORD} অক্ষরের হতে হবে`,
+      );
+    }
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
   let marketingId: string | undefined;
   let engineerId: string | undefined;
   let accountsId: string | undefined;
 
-  for (const u of users) {
+  for (const u of seedDemo ? [adminUser, ...demoUsers] : [adminUser]) {
     const user = await prisma.user.upsert({
       where: { email: u.email },
       update: { name: u.name, phone: u.phone, role: u.role, active: true },
@@ -888,11 +934,21 @@ async function main() {
     console.log(`✔ ${u.role.padEnd(9)} ${u.email}`);
   }
 
+  // ফেজ টেমপ্লেট ডেমো নয় — Lead → Won কনভার্শনের জন্য দুই মোডেই দরকার
+  await seedPhaseTemplate();
+
+  if (!seedDemo) {
+    console.log(
+      `\nℹ SEED_DEMO=false — ডেমো লিড, প্রজেক্ট ও স্টাফ অ্যাকাউন্ট তৈরি করা হয়নি।` +
+        `\n  বাকি ইউজার অ্যাডমিন হিসেবে লগইন করে /admin/users থেকে বানান।`,
+    );
+    return;
+  }
+
   if (!marketingId || !engineerId || !accountsId) {
     throw new Error('ডেমো স্টাফ ইউজার তৈরি হয়নি — সিড থামানো হলো');
   }
 
-  await seedPhaseTemplate();
   await seedLeads(marketingId, accountsId);
   // লিড তৈরির পরেই — Won লিডটিই প্রজেক্টে রূপ নেয়
   await seedProject(marketingId, accountsId, engineerId);
