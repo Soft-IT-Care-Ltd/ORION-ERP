@@ -9,25 +9,28 @@ import {
 } from '@/lib/phases';
 
 /**
- * একটি ইউনিটের পুরো ফেজ টাইমলাইন — Admin, Engineer ও Customer, তিন প্যানেলেই
+ * একটি প্রজেক্টের পুরো ফেজ টাইমলাইন — Admin, Engineer ও Customer, তিন প্যানেলেই
  * একই ডেটা লাগে, তাই কুয়েরিটা এক জায়গায়।
  *
  * এটি server-only (`lib/prisma` import করে) — client component থেকে import নয়;
  * বিশুদ্ধ হিসাব ও লেবেল `lib/phases.ts` এ আছে।
  */
 
-/** এক ইউনিটে এতগুলোর বেশি আপডেট বাস্তবে হয় না — অসীম কুয়েরি ঠেকানোর সীমা */
+/** এক প্রজেক্টে এতগুলোর বেশি আপডেট বাস্তবে হয় না — অসীম কুয়েরি ঠেকানোর সীমা */
 const MAX_UPDATES = 100;
 
-export type UnitTimeline = {
+export type ProjectTimeline = {
   phases: PhaseView[];
   summary: PhaseSummary;
   updates: PhaseUpdateItem[];
 };
 
-export async function loadUnitTimeline(unitId: string, now: Date): Promise<UnitTimeline> {
+export async function loadProjectTimeline(
+  projectId: string,
+  now: Date,
+): Promise<ProjectTimeline> {
   const phases = await prisma.phase.findMany({
-    where: { unitId },
+    where: { projectId },
     select: {
       id: true,
       name: true,
@@ -43,7 +46,7 @@ export async function loadUnitTimeline(unitId: string, now: Date): Promise<UnitT
   });
 
   const updateRows = await prisma.phaseUpdate.findMany({
-    where: { phase: { unitId } },
+    where: { phase: { projectId } },
     select: {
       id: true,
       phaseId: true,

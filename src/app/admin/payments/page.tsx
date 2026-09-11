@@ -10,7 +10,7 @@ import {
   markOverdueInstallments,
 } from '@/lib/payment-data';
 import { computeInstallmentStatus } from '@/lib/payments';
-import { SALE_STATUS_BADGE, SALE_STATUS_LABEL } from '@/lib/sales';
+import { PROJECT_STATUS_BADGE, PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { cn, formatBDT } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ export const metadata = { title: 'পেমেন্ট' };
 
 /**
  * PRD সেকশন ৫.৭ (Financial report) — Admin এর পেমেন্ট ওভারভিউ:
- * collected vs receivable, aging, আর সেল-ভিত্তিক আদায়ের অবস্থা।
+ * collected vs receivable, aging, আর প্রজেক্ট-ভিত্তিক আদায়ের অবস্থা।
  *
  * প্ল্যান তৈরি/এডিট ও পেমেন্ট এন্ট্রি অ্যাকাউন্টস প্যানেলেই হয় — Admin এর
  * `ROUTE_ROLES` এ `/accounts` অনুমোদিত, তাই লিংকগুলো সেখানেই পাঠায় (দুই জায়গায়
@@ -34,17 +34,18 @@ export default async function AdminPaymentsPage() {
   const now = new Date();
   await markOverdueInstallments(now);
 
-  const [kpi, aging, saleRows] = await Promise.all([
+  const [kpi, aging, projectRows] = await Promise.all([
     loadCollectionKpi(now),
     loadAgingReport(now),
-    prisma.sale.findMany({
+    prisma.project.findMany({
       select: {
         id: true,
-        totalAmount: true,
-        saleDate: true,
+        totalContractValue: true,
+        title: true,
+        createdAt: true,
+        startDate: true,
         status: true,
         customer: { select: { user: { select: { name: true } } } },
-        unit: { select: { unitNo: true, project: { select: { name: true } } } },
         paymentPlan: {
           select: {
             installments: {
@@ -57,12 +58,12 @@ export default async function AdminPaymentsPage() {
           },
         },
       },
-      orderBy: { saleDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
     }),
   ]);
 
-  const rows = saleRows.map((sale) => {
-    const installments = sale.paymentPlan?.installments ?? [];
+  const rows = projectRows.map((project) => {
+    const installments = project.paymentPlan?.installments ?? [];
     let scheduled = 0;
     let collected = 0;
     let overdue = 0;
@@ -80,12 +81,12 @@ export default async function AdminPaymentsPage() {
     }
 
     return {
-      id: sale.id,
-      customerName: sale.customer.user.name,
-      unitLabel: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
-      saleDate: sale.saleDate,
-      status: sale.status,
-      totalAmount: Number(sale.totalAmount),
+      id: project.id,
+      customerName: project.customer.user.name,
+      projectTitle: project.title,
+      startedAt: project.startDate ?? project.createdAt,
+      status: project.status,
+      totalAmount: Number(project.totalContractValue),
       hasPlan: installments.length > 0,
       scheduled,
       collected,
@@ -160,16 +161,16 @@ export default async function AdminPaymentsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">সেল-ভিত্তিক আদায়</CardTitle>
+          <CardTitle className="text-base">প্রজেক্ট-ভিত্তিক আদায়</CardTitle>
           <CardDescription>
-            {rows.length} টি সেল · বিস্তারিত শিডিউল দেখতে যেকোনো সারিতে ক্লিক করুন
+            {rows.length} টি প্রজেক্ট · বিস্তারিত শিডিউল দেখতে যেকোনো সারিতে ক্লিক করুন
           </CardDescription>
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
             <p className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
               <Wallet className="h-6 w-6" />
-              এখনো কোনো সেল নেই
+              এখনো কোনো প্রজেক্ট নেই
             </p>
           ) : (
             <ul className="space-y-2">
@@ -184,9 +185,9 @@ export default async function AdminPaymentsPage() {
                         <span className="truncate font-medium">{row.customerName}</span>
                         <Badge
                           variant="secondary"
-                          className={cn('text-[11px]', SALE_STATUS_BADGE[row.status])}
+                          className={cn('text-[11px]', PROJECT_STATUS_BADGE[row.status])}
                         >
-                          {SALE_STATUS_LABEL[row.status]}
+                          {PROJECT_STATUS_LABEL[row.status]}
                         </Badge>
                         {row.overdue > 0 ? (
                           <Badge variant="destructive" className="text-[11px]">
@@ -196,7 +197,7 @@ export default async function AdminPaymentsPage() {
                         ) : null}
                       </div>
                       <p className="truncate text-sm text-muted-foreground">
-                        {row.unitLabel} · সেল {format(row.saleDate, 'dd MMM yyyy')} ·{' '}
+                        {row.projectTitle} · শুরু {format(row.startedAt, 'dd MMM yyyy')} ·{' '}
                         {formatBDT(row.totalAmount)}
                       </p>
                       {row.hasPlan ? (

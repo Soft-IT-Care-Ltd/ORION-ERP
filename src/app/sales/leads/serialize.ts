@@ -1,13 +1,11 @@
 import { format } from 'date-fns';
 import type { Prisma } from '@prisma/client';
-import { budgetLabel, followUpTone, SOURCE_LABEL } from '@/lib/leads';
-import { unitLabel } from '@/lib/sales';
+import { budgetLabel, buildingTypeLabel, followUpTone, SOURCE_LABEL } from '@/lib/leads';
 import { countryFlag, countryLabel, DEFAULT_PHONE_COUNTRY } from '@/lib/countries';
 import { formatPhoneInternational, splitPhone } from '@/lib/phone';
 import { formatBDT } from '@/lib/utils';
 import type { PipelineLead } from '../pipeline/types';
-import type { EditableLead, UnitOption } from './lead-form-dialog';
-import type { SaleUnitOption } from './won-sale-dialog';
+import type { EditableLead } from './lead-form-dialog';
 
 /**
  * বোর্ড ও ডিটেইল পেজ — দুই জায়গায় একই select ব্যবহার হয়, যাতে কার্ডের
@@ -21,9 +19,10 @@ export const leadCardSelect = {
   source: true,
   stage: true,
   lostReason: true,
-  unitId: true,
   residenceCountry: true,
   projectLocation: true,
+  landSize: true,
+  buildingType: true,
   budgetMin: true,
   budgetMax: true,
   assignedToId: true,
@@ -32,15 +31,10 @@ export const leadCardSelect = {
   localContactPhone: true,
   localContactRelation: true,
   assignedTo: { select: { id: true, name: true } },
-  _count: { select: { documents: true } },
+  _count: { select: { documents: true, checklist: true } },
   // Won এ কনভার্ট হয়েছে কিনা — কার্ডে ব্যাজ, আর স্টেজ মেনুর সিদ্ধান্ত এর উপর
-  sale: {
-    select: {
-      id: true,
-      status: true,
-      totalAmount: true,
-      unit: { select: { unitNo: true, project: { select: { name: true } } } },
-    },
+  project: {
+    select: { id: true, title: true, status: true, totalContractValue: true },
   },
 } satisfies Prisma.LeadSelect;
 
@@ -62,8 +56,9 @@ export function toEditableLead(lead: LeadCardRow): EditableLead {
     residenceCountry: lead.residenceCountry,
     email: lead.email,
     source: lead.source,
-    unitId: lead.unitId,
     projectLocation: lead.projectLocation,
+    landSize: lead.landSize,
+    buildingType: lead.buildingType,
     budgetMin: lead.budgetMin === null ? null : String(toNumber(lead.budgetMin)),
     budgetMax: lead.budgetMax === null ? null : String(toNumber(lead.budgetMax)),
     assignedToId: lead.assignedToId,
@@ -94,12 +89,17 @@ export function toPipelineLead(lead: LeadCardRow, today: Date): PipelineLead {
     residence: residenceLabel
       ? { flag: countryFlag(lead.residenceCountry), label: residenceLabel }
       : null,
+    // v2 — কার্ডে জমি ও বাড়ির ধরন দেখালে এক নজরেই কাজের ধরন বোঝা যায়
+    landSize: lead.landSize,
+    buildingTypeLabel: buildingTypeLabel(lead.buildingType),
     documentCount: lead._count.documents,
-    sale: lead.sale
+    checklistCount: lead._count.checklist,
+    project: lead.project
       ? {
-          status: lead.sale.status,
-          unitLabel: unitLabel(lead.sale.unit),
-          amountLabel: formatBDT(Number(lead.sale.totalAmount)),
+          id: lead.project.id,
+          title: lead.project.title,
+          status: lead.project.status,
+          amountLabel: formatBDT(Number(lead.project.totalContractValue)),
         }
       : null,
     editable: toEditableLead(lead),
@@ -110,39 +110,4 @@ export function toPipelineLead(lead: LeadCardRow, today: Date): PipelineLead {
 export function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-
-/* ------------------------------------------------------------------- units */
-
-/**
- * ইউনিট ড্রপডাউন — লিড ফর্মে (শুধু নাম) ও সেল কনফার্ম ডায়ালগে (দাম, স্ট্যাটাস,
- * আগে বিক্রি হয়ে গেছে কিনা) — দুই জায়গায় একই সারি ব্যবহৃত হয়।
- */
-export const unitOptionSelect = {
-  id: true,
-  unitNo: true,
-  price: true,
-  status: true,
-  project: { select: { name: true } },
-  sale: { select: { id: true } },
-} satisfies Prisma.UnitSelect;
-
-export type UnitOptionRow = Prisma.UnitGetPayload<{ select: typeof unitOptionSelect }>;
-
-export function toUnitOption(unit: UnitOptionRow): UnitOption {
-  return { id: unit.id, label: unitLabel(unit) };
-}
-
-export function toSaleUnitOption(unit: UnitOptionRow): SaleUnitOption {
-  const price = Number(unit.price);
-  return {
-    id: unit.id,
-    projectName: unit.project.name,
-    unitNo: unit.unitNo,
-    price: String(price),
-    priceLabel: formatBDT(price),
-    status: unit.status,
-    // Sale.unitId unique — একটি ইউনিট একবারই বিক্রি হতে পারে
-    taken: unit.sale !== null || unit.status === 'SOLD',
-  };
 }

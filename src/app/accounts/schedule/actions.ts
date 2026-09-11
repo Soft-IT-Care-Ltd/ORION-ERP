@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { Prisma, SaleStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
@@ -10,15 +10,22 @@ import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action
 import { generateSchedule } from '@/lib/payments';
 import { markOverdueInstallments } from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
-import { generatePlanSchema, saleIdSchema, saveScheduleSchema } from '@/lib/validations/payment';
+import {
+  generatePlanSchema,
+  projectIdSchema,
+  saveScheduleSchema,
+} from '@/lib/validations/payment';
 
 export type { ActionResult } from '@/lib/action-result';
 
 /** পেমেন্ট প্ল্যান বদলালে যেসব প্যানেলের ডেটা বাসি হয় */
-function revalidatePlan(saleId?: string) {
+function revalidatePlan(projectId?: string) {
   revalidatePath('/accounts');
   revalidatePath('/accounts/schedule');
-  if (saleId) revalidatePath(`/accounts/schedule/${saleId}`);
+  if (projectId) {
+    revalidatePath(`/accounts/schedule/${projectId}`);
+    revalidatePath(`/admin/projects/${projectId}`);
+  }
   revalidatePath('/accounts/payments');
   revalidatePath('/accounts/overdue');
   revalidatePath('/admin');
@@ -27,17 +34,18 @@ function revalidatePlan(saleId?: string) {
   revalidatePath('/customer/payments');
 }
 
-/** প্ল্যান সেট/বদলের জন্য দরকারি সেল তথ্য */
-async function loadSaleForPlan(saleId: string) {
-  return prisma.sale.findUnique({
-    where: { id: saleId },
+/** প্ল্যান সেট/বদলের জন্য দরকারি প্রজেক্ট তথ্য */
+async function loadProjectForPlan(projectId: string) {
+  return prisma.project.findUnique({
+    where: { id: projectId },
     select: {
       id: true,
-      totalAmount: true,
-      saleDate: true,
-      status: true,
+      title: true,
+      totalContractValue: true,
+      startDate: true,
+      createdAt: true,
       customer: { select: { userId: true, user: { select: { name: true } } } },
-      unit: { select: { unitNo: true, project: { select: { name: true } } } },
+      phases: { select: { id: true }, orderBy: { order: 'asc' } },
       paymentPlan: {
         select: {
           id: true,
@@ -50,28 +58,21 @@ async function loadSaleForPlan(saleId: string) {
   });
 }
 
-type SaleForPlan = NonNullable<Awaited<ReturnType<typeof loadSaleForPlan>>>;
+type ProjectForPlan = NonNullable<Awaited<ReturnType<typeof loadProjectForPlan>>>;
 
 /**
  * টাকা জমা পড়ে যাওয়া কিস্তি মুছে ফেললে সেই পেমেন্টগুলো অনাথ হয়ে যেত —
  * তাই শিডিউল নতুন করে বানানোর আগে এই পাহারা।
  */
-function paidInstallments(sale: SaleForPlan) {
-  return (sale.paymentPlan?.installments ?? []).filter((i) => i._count.payments > 0);
+function paidInstallments(project: ProjectForPlan) {
+  return (project.paymentPlan?.installments ?? []).filter((i) => i._count.payments > 0);
 }
 
-/** প্ল্যান সেট হলে ড্রাফট সেলটি কনফার্মড হয় — PRD সেকশন ৫.১ ("draft mode") */
-async function confirmSaleIfDraft(tx: Prisma.TransactionClient, sale: SaleForPlan) {
-  if (sale.status !== SaleStatus.DRAFT) return false;
-  await tx.sale.update({ where: { id: sale.id }, data: { status: SaleStatus.CONFIRMED } });
-  return true;
-}
-
-/** কাস্টমারকে জানানো — নিজের পোর্টালে শিডিউল দেখতে পাবেন (PRD সেকশন ৫.৪) */
-async function notifyCustomer(sale: SaleForPlan, message: string, actorId: string) {
-  if (sale.customer.userId === actorId) return;
+/** কাস্টমারকে জানানো — নিজের পোর্টালে শিডিউল দেখতে পাবেন (PRD সেকশন ৫.৭) */
+async function notifyCustomer(project: ProjectForPlan, message: string, actorId: string) {
+  if (project.customer.userId === actorId) return;
   await notify({
-    userId: sale.customer.userId,
+    userId: project.customer.userId,
     type: 'PAYMENT_DUE',
     message,
     link: '/customer/payments',
@@ -81,7 +82,7 @@ async function notifyCustomer(sale: SaleForPlan, message: string, actorId: strin
 /* --------------------------------------------------- template generate */
 
 /**
- * PRD সেকশন ৫.৩ এর স্যাম্পল টেমপ্লেট থেকে পুরো শিডিউল auto-generate।
+ * PRD সেকশন ৫.৫ এর স্যাম্পল টেমপ্লেট থেকে পুরো শিডিউল auto-generate।
  * আগের প্ল্যান থাকলে (এবং কোনো টাকা জমা না পড়লে) সেটি বদলে নতুনটি বসে।
  */
 export async function generatePlanFromTemplate(input: unknown): Promise<ActionResult> {
@@ -94,10 +95,10 @@ export async function generatePlanFromTemplate(input: unknown): Promise<ActionRe
   }
 
   const data = parsed.data;
-  const sale = await loadSaleForPlan(data.saleId);
-  if (!sale) return NOT_FOUND;
+  const project = await loadProjectForPlan(data.projectId);
+  if (!project) return NOT_FOUND;
 
-  const paid = paidInstallments(sale);
+  const paid = paidInstallments(project);
   if (paid.length > 0) {
     return {
       ok: false,
@@ -105,7 +106,7 @@ export async function generatePlanFromTemplate(input: unknown): Promise<ActionRe
     };
   }
 
-  const totalAmount = Number(sale.totalAmount);
+  const totalAmount = Number(project.totalContractValue);
   const rows = generateSchedule({
     totalAmount,
     bookingDate: data.bookingDate,
@@ -125,14 +126,14 @@ export async function generatePlanFromTemplate(input: unknown): Promise<ActionRe
   }
 
   try {
-    const confirmed = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       // Installment → PaymentPlan cascade, তাই পুরনো প্ল্যান মুছলেই কিস্তিও যায়
-      if (sale.paymentPlan) {
-        await tx.paymentPlan.delete({ where: { id: sale.paymentPlan.id } });
+      if (project.paymentPlan) {
+        await tx.paymentPlan.delete({ where: { id: project.paymentPlan.id } });
       }
       await tx.paymentPlan.create({
         data: {
-          saleId: sale.id,
+          projectId: project.id,
           installments: {
             create: rows.map((row) => ({
               label: row.label,
@@ -144,15 +145,14 @@ export async function generatePlanFromTemplate(input: unknown): Promise<ActionRe
           },
         },
       });
-      return confirmSaleIfDraft(tx, sale);
     });
 
-    // তারিখ পেরিয়ে যাওয়া কিস্তি (যেমন পুরনো বুকিং মানি) সঙ্গে সঙ্গেই বকেয়া হবে
+    // তারিখ পেরিয়ে যাওয়া কিস্তি (যেমন পুরনো সাইনআপ মানি) সঙ্গে সঙ্গেই বকেয়া হবে
     await markOverdueInstallments();
 
     await logActivity({
       entityType: 'PaymentPlan',
-      entityId: sale.id,
+      entityId: project.id,
       userId: accounts.id,
       action: 'PAYMENT_PLAN_GENERATED',
       metadata: {
@@ -165,21 +165,17 @@ export async function generatePlanFromTemplate(input: unknown): Promise<ActionRe
           monthlyCount: data.monthlyCount,
           monthlyPercent: data.monthlyPercent,
         },
-        saleConfirmed: confirmed,
       },
     });
 
     await notifyCustomer(
-      sale,
-      `${sale.unit.project.name} — ${sale.unit.unitNo} এর পেমেন্ট শিডিউল তৈরি হয়েছে (${rows.length} টি কিস্তি)`,
+      project,
+      `${project.title} এর পেমেন্ট শিডিউল তৈরি হয়েছে (${rows.length} টি কিস্তি)`,
       accounts.id,
     );
 
-    revalidatePlan(sale.id);
-    return {
-      ok: true,
-      message: `${rows.length} টি কিস্তির শিডিউল তৈরি হয়েছে${confirmed ? ' — সেলটি কনফার্মড হলো' : ''}`,
-    };
+    revalidatePlan(project.id);
+    return { ok: true, message: `${rows.length} টি কিস্তির শিডিউল তৈরি হয়েছে` };
   } catch (error) {
     console.error('generatePlanFromTemplate failed', error);
     return { ok: false, message: 'শিডিউল তৈরি করা যায়নি' };
@@ -206,12 +202,12 @@ export async function saveSchedule(input: unknown): Promise<ActionResult> {
     };
   }
 
-  const { saleId, installments } = parsed.data;
-  const sale = await loadSaleForPlan(saleId);
-  if (!sale) return NOT_FOUND;
+  const { projectId, installments } = parsed.data;
+  const project = await loadProjectForPlan(projectId);
+  if (!project) return NOT_FOUND;
 
   const keptIds = new Set(installments.map((row) => row.id).filter(Boolean) as string[]);
-  const removedWithPayments = paidInstallments(sale).filter((i) => !keptIds.has(i.id));
+  const removedWithPayments = paidInstallments(project).filter((i) => !keptIds.has(i.id));
   if (removedWithPayments.length > 0) {
     return {
       ok: false,
@@ -219,15 +215,23 @@ export async function saveSchedule(input: unknown): Promise<ActionResult> {
     };
   }
 
-  const totalAmount = Number(sale.totalAmount);
+  const totalAmount = Number(project.totalContractValue);
   const scheduleTotal = installments.reduce((sum, row) => sum + row.amount, 0);
   const difference = scheduleTotal - totalAmount;
 
+  // কিস্তির সাথে ফেজ লিংক করা যায়, কিন্তু শুধু *এই* প্রজেক্টের ফেজের সাথে —
+  // অন্য প্রজেক্টের phaseId পাঠিয়ে দুই প্রজেক্ট জোড়া লাগানো যাবে না
+  const projectPhaseIds = new Set(project.phases.map((phase) => phase.id));
+  const strayPhase = installments.find((row) => row.phaseId && !projectPhaseIds.has(row.phaseId));
+  if (strayPhase) {
+    return { ok: false, message: `"${strayPhase.label}" এর ফেজটি এই প্রজেক্টের নয়` };
+  }
+
   try {
-    const confirmed = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const plan =
-        sale.paymentPlan ??
-        (await tx.paymentPlan.create({ data: { saleId }, select: { id: true } }));
+        project.paymentPlan ??
+        (await tx.paymentPlan.create({ data: { projectId }, select: { id: true } }));
 
       // তালিকা থেকে বাদ পড়া কিস্তিগুলো (উপরে যাচাই — কোনোটিতে পেমেন্ট নেই)
       await tx.installment.deleteMany({
@@ -240,7 +244,8 @@ export async function saveSchedule(input: unknown): Promise<ActionResult> {
           order: index + 1,
           dueDate: row.dueDate,
           amount: new Prisma.Decimal(row.amount),
-          // হাতে বদলানোর পর শতাংশ আবার সেল ভ্যালু থেকে হিসাব — কলামটি যেন মিথ্যা না বলে
+          phaseId: row.phaseId,
+          // হাতে বদলানোর পর শতাংশ আবার কন্ট্রাক্ট ভ্যালু থেকে হিসাব — কলামটি যেন মিথ্যা না বলে
           percentage:
             totalAmount > 0
               ? new Prisma.Decimal(Math.round((row.amount / totalAmount) * 10000) / 100)
@@ -259,46 +264,41 @@ export async function saveSchedule(input: unknown): Promise<ActionResult> {
 
       // প্ল্যান বদলালে তার updatedAt ও নড়ে (এডিটের ইতিহাস বোঝার জন্য)
       await tx.paymentPlan.update({ where: { id: plan.id }, data: { updatedAt: new Date() } });
-
-      return confirmSaleIfDraft(tx, sale);
     });
 
     await markOverdueInstallments();
 
     await logActivity({
       entityType: 'PaymentPlan',
-      entityId: sale.id,
+      entityId: project.id,
       userId: accounts.id,
       action: 'PAYMENT_PLAN_SAVED',
       metadata: {
         installmentCount: installments.length,
         scheduleTotal: String(scheduleTotal),
-        saleTotal: String(totalAmount),
-        saleConfirmed: confirmed,
+        contractValue: String(totalAmount),
+        phaseLinked: installments.filter((row) => row.phaseId !== null).length,
       },
     });
 
     await notifyCustomer(
-      sale,
-      `${sale.unit.project.name} — ${sale.unit.unitNo} এর পেমেন্ট শিডিউল আপডেট হয়েছে`,
+      project,
+      `${project.title} এর পেমেন্ট শিডিউল আপডেট হয়েছে`,
       accounts.id,
     );
 
-    revalidatePlan(sale.id);
+    revalidatePlan(project.id);
 
-    // যোগফল সেল ভ্যালুর সমান না হলে সেভ আটকানো হয় না (ছাড়/সমন্বয় বাস্তবে হয়),
-    // কিন্তু অ্যাকাউন্টস যেন খেয়াল না হারায় তাই মেসেজেই পার্থক্যটা বলা থাকে
+    // যোগফল কন্ট্রাক্ট ভ্যালুর সমান না হলে সেভ আটকানো হয় না (ছাড়/সমন্বয় বাস্তবে
+    // হয়), কিন্তু অ্যাকাউন্টস যেন খেয়াল না হারায় তাই মেসেজেই পার্থক্যটা বলা থাকে
     const warning =
       difference === 0
         ? ''
         : difference > 0
-          ? ` — সতর্কতা: শিডিউল সেল ভ্যালুর চেয়ে ${formatBDT(difference)} বেশি`
+          ? ` — সতর্কতা: শিডিউল কন্ট্রাক্ট ভ্যালুর চেয়ে ${formatBDT(difference)} বেশি`
           : ` — সতর্কতা: ${formatBDT(-difference)} কম`;
 
-    return {
-      ok: true,
-      message: `${installments.length} টি কিস্তি সেভ হয়েছে${confirmed ? ' — সেলটি কনফার্মড হলো' : ''}${warning}`,
-    };
+    return { ok: true, message: `${installments.length} টি কিস্তি সেভ হয়েছে${warning}` };
   } catch (error) {
     console.error('saveSchedule failed', error);
     return { ok: false, message: 'শিডিউল সেভ করা যায়নি' };
@@ -308,19 +308,19 @@ export async function saveSchedule(input: unknown): Promise<ActionResult> {
 /* -------------------------------------------------------- delete plan */
 
 /** পুরো প্ল্যান বাতিল — কোনো টাকা জমা না পড়ে থাকলেই কেবল */
-export async function deletePlan(input: { saleId: string }): Promise<ActionResult> {
+export async function deletePlan(input: { projectId: string }): Promise<ActionResult> {
   const accounts = await getAuthorizedUser('paymentPlan:manage');
   if (!accounts) return FORBIDDEN;
 
-  const parsed = saleIdSchema.safeParse(input);
+  const parsed = projectIdSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: 'ইনপুট সঠিক নয়', fieldErrors: zodErrors(parsed.error) };
   }
 
-  const sale = await loadSaleForPlan(parsed.data.saleId);
-  if (!sale?.paymentPlan) return NOT_FOUND;
+  const project = await loadProjectForPlan(parsed.data.projectId);
+  if (!project?.paymentPlan) return NOT_FOUND;
 
-  const paid = paidInstallments(sale);
+  const paid = paidInstallments(project);
   if (paid.length > 0) {
     return {
       ok: false,
@@ -329,17 +329,17 @@ export async function deletePlan(input: { saleId: string }): Promise<ActionResul
   }
 
   try {
-    await prisma.paymentPlan.delete({ where: { id: sale.paymentPlan.id } });
+    await prisma.paymentPlan.delete({ where: { id: project.paymentPlan.id } });
 
     await logActivity({
       entityType: 'PaymentPlan',
-      entityId: sale.id,
+      entityId: project.id,
       userId: accounts.id,
       action: 'PAYMENT_PLAN_DELETED',
-      metadata: { installmentCount: sale.paymentPlan.installments.length },
+      metadata: { installmentCount: project.paymentPlan.installments.length },
     });
 
-    revalidatePlan(sale.id);
+    revalidatePlan(project.id);
     return { ok: true, message: 'পেমেন্ট প্ল্যান মুছে ফেলা হয়েছে' };
   } catch (error) {
     console.error('deletePlan failed', error);

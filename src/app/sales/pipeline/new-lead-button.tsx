@@ -4,19 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  LeadFormDialog,
-  type ExecutiveOption,
-  type UnitOption,
-} from '../leads/lead-form-dialog';
+import { LeadFormDialog, type ExecutiveOption } from '../leads/lead-form-dialog';
 
 export function NewLeadButton({
   executives,
-  units,
   canAssign,
 }: {
   executives: ExecutiveOption[];
-  units: UnitOption[];
   canAssign: boolean;
 }) {
   const router = useRouter();
@@ -32,7 +26,6 @@ export function NewLeadButton({
         open={open}
         onOpenChange={setOpen}
         executives={executives}
-        units={units}
         canAssign={canAssign}
         onCreated={(id) => router.push(`/sales/leads/${id}`)}
       />

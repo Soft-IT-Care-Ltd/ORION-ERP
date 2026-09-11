@@ -2,7 +2,7 @@ import { differenceInCalendarDays, format } from 'date-fns';
 import type { PhaseStatus } from '@prisma/client';
 
 /**
- * Construction phase timeline এর কনস্ট্যান্ট, লেবেল ও হিসাব — PRD সেকশন ৫.২।
+ * Construction phase timeline এর কনস্ট্যান্ট, লেবেল ও হিসাব — PRD সেকশন ৫.৪।
  *
  * `lib/leads.ts` / `lib/sales.ts` এর মতোই এখানে শুধু type-only Prisma import ও
  * বিশুদ্ধ ফাংশন, কারণ ফাইলটি client component (ইঞ্জিনিয়ারের আপডেট ফর্ম) থেকেও
@@ -20,12 +20,14 @@ export type PhaseTemplateSeed = {
 };
 
 /**
- * PRD সেকশন ৫.২ এর ডিফল্ট ৮-ফেজ টেমপ্লেট। নতুন প্রজেক্টে এটি বসিয়ে নেওয়া যায়,
- * তারপর প্রজেক্ট-ভেদে নাম/সময়কাল বদলানো যায় (PRD: "customizable")।
+ * PRD সেকশন ৫.৪ এর ডিফল্ট ৭-ফেজ টেমপ্লেট।
+ *
+ * v2 তে জমি, ডিজাইন ও সরকারি অনুমোদন **প্রি-প্রজেক্ট পাইপলাইনে** (লিড স্টেজ)
+ * হয়ে যায়, তাই প্রজেক্টের ফেজ শুরু হয় সরাসরি নির্মাণকাজ থেকে। তালিকাটি
+ * গ্লোবাল টেমপ্লেটের ডিফল্ট — Admin → ফেজ টেমপ্লেট থেকে নাম/সময়কাল বদলানো যায়।
  */
 export const DEFAULT_PHASE_TEMPLATE: PhaseTemplateSeed[] = [
-  { name: 'Land Acquisition / Approval', defaultDurationDays: 45, owner: 'Admin/Legal' }, // ৩০–৬০ দিন
-  { name: 'Design & Municipal Approval (RAJUK/KDA)', defaultDurationDays: 60, owner: 'Admin' }, // ৪৫–৯০ দিন
+  { name: 'Site Mobilization / Set-up', defaultDurationDays: 8, owner: 'Site Engineer' }, // ৫–১০ দিন
   { name: 'Foundation Work', defaultDurationDays: 40, owner: 'Site Engineer' }, // ৩০–৪৫ দিন
   { name: 'Structure (Column/Beam/Slab)', defaultDurationDays: 270, owner: 'Site Engineer' }, // ৬–১২ মাস
   { name: 'Brick Work & Plaster', defaultDurationDays: 75, owner: 'Site Engineer' }, // ২–৩ মাস
@@ -39,8 +41,7 @@ export const DEFAULT_PHASE_TEMPLATE: PhaseTemplateSeed[] = [
  * নাম এডিট করা কাস্টম ফেজে কিছু দেখাবে না (key মিলবে না) — সেটাই কাম্য।
  */
 export const PHASE_NAME_BN: Record<string, string> = {
-  'Land Acquisition / Approval': 'জমি অধিগ্রহণ ও অনুমোদন',
-  'Design & Municipal Approval (RAJUK/KDA)': 'ডিজাইন ও নকশা অনুমোদন',
+  'Site Mobilization / Set-up': 'সাইট প্রস্তুতি ও মালামাল',
   'Foundation Work': 'ফাউন্ডেশন',
   'Structure (Column/Beam/Slab)': 'স্ট্রাকচার (কলাম/বিম/স্ল্যাব)',
   'Brick Work & Plaster': 'ইটের গাঁথুনি ও প্লাস্টার',
@@ -49,7 +50,7 @@ export const PHASE_NAME_BN: Record<string, string> = {
   'Final Inspection & Handover': 'চূড়ান্ত পরিদর্শন ও হ্যান্ডওভার',
 };
 
-/** PRD সেকশন ৫.২ — ইঞ্জিনিয়ার এই ধাপগুলোতেই % দেয় (slider/dropdown) */
+/** PRD সেকশন ৫.৪ — ইঞ্জিনিয়ার এই ধাপগুলোতেই % দেয় (slider/dropdown) */
 export const PERCENT_OPTIONS = [0, 25, 50, 75, 100] as const;
 export type PercentOption = (typeof PERCENT_OPTIONS)[number];
 
@@ -119,7 +120,7 @@ function plannedDays(phase: { plannedStart: Date | null; plannedEnd: Date | null
 }
 
 /**
- * প্রজেক্ট/ইউনিটের সামগ্রিক অগ্রগতি (%) — PRD সেকশন ৫.২ এর "৬৫% সম্পন্ন"।
+ * প্রজেক্টের সামগ্রিক অগ্রগতি (%) — PRD সেকশন ৫.৪ এর "৬৫% সম্পন্ন"।
  *
  * সব ফেজের planned duration জানা থাকলে সময়-ভারিত গড়, নইলে সরল গড়। ভারিত গড়
  * জরুরি — Structure ফেজ একাই ৯ মাস, আর Handover ৩ সপ্তাহ; সরল গড়ে দুটোর ওজন

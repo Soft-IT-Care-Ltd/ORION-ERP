@@ -28,7 +28,7 @@ export function PaymentScheduleTable({
   installments,
   actions,
   showReceipts = true,
-  emptyMessage = 'এই সেলের জন্য এখনো পেমেন্ট প্ল্যান তৈরি হয়নি',
+  emptyMessage = 'এই প্রজেক্টের জন্য এখনো পেমেন্ট প্ল্যান তৈরি হয়নি',
   className,
 }: {
   installments: InstallmentView[];

@@ -5,7 +5,7 @@ import { DOCUMENT_TYPE_BADGE, type DocumentGroup, type DocumentItem } from '@/li
 
 /**
  * PRD সেকশন ৫.৪ — কাস্টমারের ডকুমেন্ট তালিকা, টাইপ অনুযায়ী গ্রুপ করা
- * (বুকিং ফর্ম, সেল এগ্রিমেন্ট, অ্যালটমেন্ট লেটার, রসিদ …)।
+ * (কনস্ট্রাকশন চুক্তি, সরকারি অনুমোদন কপি, ডিজাইন ড্রয়িং, রসিদ …)।
  *
  * `PhaseTimeline` / `PaymentScheduleTable` এর মতোই server component ও read-only —
  * আপলোড/মুছে ফেলার সুযোগ নেই (PRD সেকশন ৪: কাস্টমার শুধু দেখবে ও ডাউনলোড করবে)।

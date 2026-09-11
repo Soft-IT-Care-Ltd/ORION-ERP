@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { markOverdueInstallments } from '@/lib/payment-data';
 import { computeInstallmentStatus } from '@/lib/payments';
-import { SALE_STATUS_BADGE, SALE_STATUS_LABEL } from '@/lib/sales';
+import { PROJECT_STATUS_BADGE, PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { cn, formatBDT } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,8 +14,8 @@ import { Card, CardContent } from '@/components/ui/card';
 export const metadata = { title: 'পেমেন্ট শিডিউল' };
 
 /**
- * PRD সেকশন ৫.৩ — সব সেলের পেমেন্ট প্ল্যানের অবস্থা এক তালিকায়।
- * প্ল্যান বাকি থাকা সেলগুলো আগে দেখানো হয় — সেটাই অ্যাকাউন্টসের পরের কাজ।
+ * PRD সেকশন ৫.৫ — সব প্রজেক্টের পেমেন্ট প্ল্যানের অবস্থা এক তালিকায়।
+ * প্ল্যান বাকি থাকা প্রজেক্টগুলো আগে দেখানো হয় — সেটাই অ্যাকাউন্টসের পরের কাজ।
  */
 export default async function SchedulesPage() {
   const accounts = await getAuthorizedUser('paymentPlan:view');
@@ -25,14 +25,15 @@ export default async function SchedulesPage() {
   // পেজ খুললেই স্ট্যাটাস তাজা — cron না চললেও তালিকা সঠিক থাকে
   await markOverdueInstallments(now);
 
-  const sales = await prisma.sale.findMany({
+  const projects = await prisma.project.findMany({
     select: {
       id: true,
-      totalAmount: true,
-      saleDate: true,
+      title: true,
+      totalContractValue: true,
+      createdAt: true,
+      startDate: true,
       status: true,
       customer: { select: { user: { select: { name: true, phone: true } } } },
-      unit: { select: { unitNo: true, project: { select: { name: true } } } },
       paymentPlan: {
         select: {
           installments: {
@@ -45,11 +46,11 @@ export default async function SchedulesPage() {
         },
       },
     },
-    orderBy: { saleDate: 'desc' },
+    orderBy: { createdAt: 'desc' },
   });
 
-  const rows = sales.map((sale) => {
-    const installments = sale.paymentPlan?.installments ?? [];
+  const rows = projects.map((project) => {
+    const installments = project.paymentPlan?.installments ?? [];
     let scheduled = 0;
     let collected = 0;
     let overdueAmount = 0;
@@ -69,12 +70,12 @@ export default async function SchedulesPage() {
     }
 
     return {
-      id: sale.id,
-      customerName: sale.customer.user.name,
-      unitLabel: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
-      saleDate: sale.saleDate,
-      status: sale.status,
-      totalAmount: Number(sale.totalAmount),
+      id: project.id,
+      customerName: project.customer.user.name,
+      projectTitle: project.title,
+      startedAt: project.startDate ?? project.createdAt,
+      status: project.status,
+      totalAmount: Number(project.totalContractValue),
       hasPlan: installments.length > 0,
       installmentCount: installments.length,
       scheduled,
@@ -89,7 +90,7 @@ export default async function SchedulesPage() {
   const ordered = [...rows].sort((a, b) => {
     if (a.hasPlan !== b.hasPlan) return a.hasPlan ? 1 : -1;
     if ((a.overdueCount > 0) !== (b.overdueCount > 0)) return a.overdueCount > 0 ? -1 : 1;
-    return b.saleDate.getTime() - a.saleDate.getTime();
+    return b.startedAt.getTime() - a.startedAt.getTime();
   });
 
   const pendingPlans = rows.filter((r) => !r.hasPlan).length;
@@ -99,7 +100,7 @@ export default async function SchedulesPage() {
       <div>
         <h1 className="text-xl font-semibold">পেমেন্ট শিডিউল</h1>
         <p className="text-sm text-muted-foreground">
-          মোট {rows.length} টি সেল
+          মোট {rows.length} টি প্রজেক্ট
           {pendingPlans > 0 ? (
             <span className="font-medium text-amber-700 dark:text-amber-500">
               {' '}
@@ -113,10 +114,10 @@ export default async function SchedulesPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <Wallet className="h-8 w-8 text-muted-foreground" />
-            <p className="font-medium">এখনো কোনো সেল নেই</p>
+            <p className="font-medium">এখনো কোনো প্রজেক্ট নেই</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              সেলস প্যানেলে কোনো লিড &quot;Won&quot; হলে এখানে সেলটি আসবে — তখন পেমেন্ট প্ল্যান সেট
-              করা যাবে।
+              সেলস প্যানেলে কোনো লিড &quot;Won&quot; হলে এখানে প্রজেক্টটি আসবে — তখন পেমেন্ট
+              প্ল্যান সেট করা যাবে।
             </p>
           </CardContent>
         </Card>
@@ -131,8 +132,11 @@ export default async function SchedulesPage() {
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate font-medium">{row.customerName}</span>
-                    <Badge variant="secondary" className={cn('text-[11px]', SALE_STATUS_BADGE[row.status])}>
-                      {SALE_STATUS_LABEL[row.status]}
+                    <Badge
+                      variant="secondary"
+                      className={cn('text-[11px]', PROJECT_STATUS_BADGE[row.status])}
+                    >
+                      {PROJECT_STATUS_LABEL[row.status]}
                     </Badge>
                     {!row.hasPlan ? (
                       <Badge variant="outline" className="border-amber-500/50 text-[11px] text-amber-700 dark:text-amber-500">
@@ -148,7 +152,7 @@ export default async function SchedulesPage() {
                     ) : null}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">
-                    {row.unitLabel} · সেল {format(row.saleDate, 'dd MMM yyyy')} ·{' '}
+                    {row.projectTitle} · শুরু {format(row.startedAt, 'dd MMM yyyy')} ·{' '}
                     {formatBDT(row.totalAmount)}
                   </p>
                   {row.hasPlan ? (

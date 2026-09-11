@@ -19,7 +19,7 @@ export default async function AdminDashboard({
     { label: 'সক্রিয় ইউজার', value: stats.activeUsers, icon: Users, href: '/admin/users' },
     { label: 'মোট লিড', value: stats.leads, icon: KanbanSquare, href: '/sales/pipeline' },
     { label: 'প্রজেক্ট', value: stats.projects, icon: Building2, href: '/admin/projects' },
-    { label: 'ইউনিট', value: stats.units, icon: Wallet, href: '/admin/projects' },
+    { label: 'খোলা লিড', value: stats.openLeads, icon: Wallet, href: '/sales/pipeline' },
     {
       label: 'ফলো-আপ পেরিয়েছে',
       value: stats.overdueFollowUps,

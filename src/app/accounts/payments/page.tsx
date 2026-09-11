@@ -13,7 +13,7 @@ import {
 } from '@/lib/payments';
 import { cn, formatBDT } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PaymentEntryButton, type SaleOption } from './payment-entry-dialog';
+import { PaymentEntryButton, type ProjectOption } from './payment-entry-dialog';
 import { OverdueSweepButton } from './overdue-sweep-button';
 
 export const metadata = { title: 'পেমেন্ট এন্ট্রি' };
@@ -35,7 +35,7 @@ export default async function PaymentsPage() {
   const now = new Date();
   await markOverdueInstallments(now);
 
-  const [dueRows, recentPayments, saleRows] = await Promise.all([
+  const [dueRows, recentPayments, projectRows] = await Promise.all([
     prisma.installment.findMany({
       where: {
         status: { not: 'PAID' },
@@ -49,11 +49,11 @@ export default async function PaymentsPage() {
         payments: { select: { amountReceived: true } },
         paymentPlan: {
           select: {
-            sale: {
+            project: {
               select: {
                 id: true,
+                title: true,
                 customer: { select: { user: { select: { name: true, phone: true } } } },
-                unit: { select: { unitNo: true, project: { select: { name: true } } } },
               },
             },
           },
@@ -75,11 +75,11 @@ export default async function PaymentsPage() {
             label: true,
             paymentPlan: {
               select: {
-                sale: {
+                project: {
                   select: {
                     id: true,
+                    title: true,
                     customer: { select: { user: { select: { name: true } } } },
-                    unit: { select: { unitNo: true, project: { select: { name: true } } } },
                   },
                 },
               },
@@ -90,37 +90,37 @@ export default async function PaymentsPage() {
       orderBy: { paidAt: 'desc' },
       take: RECENT_LIMIT,
     }),
-    prisma.sale.findMany({
+    prisma.project.findMany({
       where: { paymentPlan: { isNot: null } },
       select: {
         id: true,
         customer: { select: { user: { select: { name: true } } } },
-        unit: { select: { unitNo: true, project: { select: { name: true } } } },
+        title: true,
       },
-      orderBy: { saleDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
     }),
   ]);
 
-  const sales: SaleOption[] = saleRows.map((sale) => ({
-    id: sale.id,
-    label: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
-    customerName: sale.customer.user.name,
+  const projects: ProjectOption[] = projectRows.map((project) => ({
+    id: project.id,
+    label: project.title,
+    customerName: project.customer.user.name,
   }));
 
   const due = dueRows
     .map((row) => {
       const amount = Number(row.amount);
       const paid = row.payments.reduce((sum, p) => sum + Number(p.amountReceived), 0);
-      const sale = row.paymentPlan.sale;
+      const project = row.paymentPlan.project;
       return {
         id: row.id,
         label: row.label,
         dueDate: row.dueDate,
         remaining: amount - paid,
         status: computeInstallmentStatus({ amount, dueDate: row.dueDate }, paid, now),
-        saleId: sale.id,
-        customerName: sale.customer.user.name,
-        unitLabel: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
+        projectId: project.id,
+        customerName: project.customer.user.name,
+        projectTitle: project.title,
       };
     })
     .filter((row) => row.remaining > 0);
@@ -143,7 +143,7 @@ export default async function PaymentsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <OverdueSweepButton />
-          <PaymentEntryButton sales={sales} />
+          <PaymentEntryButton projects={projects} />
         </div>
       </div>
 
@@ -175,11 +175,11 @@ export default async function PaymentsPage() {
                     )}
                   >
                     {/* মোবাইলে তথ্য নিজের সারি পায় — নইলে `flex-1` অংশটি অঙ্ক ও
-                        বোতামের চাপে ~৫০px এ নেমে গিয়ে নাম/ইউনিট দুটোই "মোঃ র…" হয়ে যেত */}
+                        বোতামের চাপে ~৫০px এ নেমে গিয়ে নাম/প্রজেক্ট দুটোই "মোঃ র…" হয়ে যেত */}
                     <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
-                          href={`/accounts/schedule/${row.saleId}`}
+                          href={`/accounts/schedule/${row.projectId}`}
                           className="truncate font-medium hover:underline"
                         >
                           {row.customerName}
@@ -194,14 +194,14 @@ export default async function PaymentsPage() {
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground sm:truncate">
-                        {row.unitLabel} · {row.label} · {format(row.dueDate, 'dd MMM yyyy')}
+                        {row.projectTitle} · {row.label} · {format(row.dueDate, 'dd MMM yyyy')}
                       </p>
                     </div>
                     <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
                       <span className="font-semibold tabular-nums">{formatBDT(row.remaining)}</span>
                       <PaymentEntryButton
-                        sales={sales}
-                        initialSaleId={row.saleId}
+                        projects={projects}
+                        initialProjectId={row.projectId}
                         initialInstallmentId={row.id}
                         label="জমা নিন"
                         size="sm"
@@ -241,19 +241,19 @@ export default async function PaymentsPage() {
                 </thead>
                 <tbody>
                   {recentPayments.map((payment) => {
-                    const sale = payment.installment.paymentPlan.sale;
+                    const project = payment.installment.paymentPlan.project;
                     return (
                       <tr key={payment.id} className="border-b last:border-0 [&>td]:px-3 [&>td]:py-2">
                         <td className="whitespace-nowrap font-medium">{payment.receiptNo}</td>
                         <td>
                           <Link
-                            href={`/accounts/schedule/${sale.id}`}
+                            href={`/accounts/schedule/${project.id}`}
                             className="hover:underline"
                           >
-                            {sale.customer.user.name}
+                            {project.customer.user.name}
                           </Link>
                           <p className="text-xs text-muted-foreground">
-                            {sale.unit.project.name} — {sale.unit.unitNo}
+                            {project.title}
                           </p>
                         </td>
                         <td className="hidden sm:table-cell">{payment.installment.label}</td>

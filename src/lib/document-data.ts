@@ -10,14 +10,14 @@ import {
 } from '@/lib/documents';
 
 /**
- * সেল ডকুমেন্টের DB অংশ — Admin/Accounts (আপলোড ও তালিকা) এবং Customer পোর্টাল,
- * দুই জায়গাতেই একই কুয়েরি ও একই সারি-রূপান্তর লাগে, তাই এক জায়গায়
+ * প্রজেক্ট ডকুমেন্টের DB অংশ — Admin/Accounts (আপলোড ও তালিকা) এবং Customer
+ * পোর্টাল, দুই জায়গাতেই একই কুয়েরি ও একই সারি-রূপান্তর লাগে, তাই এক জায়গায়
  * (`lib/payment-data.ts` / `lib/phase-data.ts` এর মতোই)।
  *
  * এটি server-only; বিশুদ্ধ লেবেল, টাইপ ও গ্রুপিং `lib/documents.ts` এ।
  */
 
-export const saleDocumentSelect = {
+export const projectDocumentSelect = {
   id: true,
   type: true,
   fileUrl: true,
@@ -27,7 +27,9 @@ export const saleDocumentSelect = {
   uploadedBy: { select: { name: true } },
 } satisfies Prisma.DocumentSelect;
 
-export type SaleDocumentRow = Prisma.DocumentGetPayload<{ select: typeof saleDocumentSelect }>;
+export type ProjectDocumentRow = Prisma.DocumentGetPayload<{
+  select: typeof projectDocumentSelect;
+}>;
 
 /**
  * DB row → তালিকার সারি।
@@ -36,8 +38,8 @@ export type SaleDocumentRow = Prisma.DocumentGetPayload<{ select: typeof saleDoc
  * অফিসের কোন কর্মী ফাইলটি দিয়েছেন সেটি প্রাসঙ্গিক নয়, তাই সেখানে বন্ধ।
  */
 export function toDocumentItem(
-  row: SaleDocumentRow,
-  unitNo: string,
+  row: ProjectDocumentRow,
+  projectRef: string,
   options?: { showUploader?: boolean },
 ): DocumentItem {
   const type = normalizeDocumentType(row.type);
@@ -55,22 +57,22 @@ export function toDocumentItem(
     title: row.fileName,
     meta: meta.join(' · '),
     fileUrl: row.fileUrl,
-    downloadName: documentDownloadName(type, unitNo, row.fileUrl),
+    downloadName: documentDownloadName(type, projectRef, row.fileUrl),
     badge: fileExtLabel(row.fileUrl),
   };
 }
 
-/** এক সেলের সব ডকুমেন্ট — নতুনটি আগে */
-export async function loadSaleDocuments(
-  saleId: string,
-  unitNo: string,
+/** এক প্রজেক্টের সব ডকুমেন্ট — নতুনটি আগে */
+export async function loadProjectDocuments(
+  projectId: string,
+  projectRef: string,
   options?: { showUploader?: boolean },
 ): Promise<DocumentItem[]> {
   const rows = await prisma.document.findMany({
-    where: { saleId },
-    select: saleDocumentSelect,
+    where: { projectId },
+    select: projectDocumentSelect,
     orderBy: { uploadedAt: 'desc' },
   });
 
-  return rows.map((row) => toDocumentItem(row, unitNo, options));
+  return rows.map((row) => toDocumentItem(row, projectRef, options));
 }

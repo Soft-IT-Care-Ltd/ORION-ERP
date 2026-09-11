@@ -91,8 +91,8 @@ export default async function AccountsDashboard() {
             <p className="flex items-center gap-2 text-sm">
               <CalendarClock className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
               <span>
-                <span className="font-medium">{kpi.plansPending} টি সেলে</span> এখনো পেমেন্ট প্ল্যান
-                সেট করা হয়নি — প্ল্যান দিলে সেলগুলো কনফার্মড হবে।
+                <span className="font-medium">{kpi.plansPending} টি প্রজেক্টে</span> এখনো পেমেন্ট
+                প্ল্যান সেট করা হয়নি — কিস্তির শিডিউল দিয়ে শুরু করুন।
               </span>
             </p>
             <Button asChild size="sm" variant="outline">
@@ -160,7 +160,7 @@ export default async function AccountsDashboard() {
           href="/accounts/schedule"
           icon={CalendarClock}
           title="পেমেন্ট শিডিউল"
-          description="সেল বেছে ইনস্টলমেন্ট প্ল্যান তৈরি বা এডিট করুন"
+          description="প্রজেক্ট বেছে ইনস্টলমেন্ট প্ল্যান তৈরি বা এডিট করুন"
         />
         <QuickLink
           href="/accounts/payments"

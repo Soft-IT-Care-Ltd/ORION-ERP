@@ -10,19 +10,22 @@ import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action
 import { computeInstallmentStatus } from '@/lib/payments';
 import { markOverdueInstallments, nextReceiptNo } from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
-import { paymentEntrySchema, saleIdSchema } from '@/lib/validations/payment';
+import { paymentEntrySchema, projectIdSchema } from '@/lib/validations/payment';
 
 export type { ActionResult } from '@/lib/action-result';
 
 /** একই সেকেন্ডে দুটি এন্ট্রি এলে রসিদ নম্বর সংঘর্ষ হতে পারে — কয়েকবার চেষ্টা */
 const RECEIPT_RETRIES = 3;
 
-function revalidatePayments(saleId?: string) {
+function revalidatePayments(projectId?: string) {
   revalidatePath('/accounts');
   revalidatePath('/accounts/payments');
   revalidatePath('/accounts/schedule');
   revalidatePath('/accounts/overdue');
-  if (saleId) revalidatePath(`/accounts/schedule/${saleId}`);
+  if (projectId) {
+    revalidatePath(`/accounts/schedule/${projectId}`);
+    revalidatePath(`/admin/projects/${projectId}`);
+  }
   revalidatePath('/admin');
   revalidatePath('/admin/payments');
   revalidatePath('/customer');
@@ -60,11 +63,10 @@ export async function recordPayment(
       payments: { select: { amountReceived: true } },
       paymentPlan: {
         select: {
-          sale: {
+          project: {
             select: {
               id: true,
               customer: { select: { userId: true } },
-              unit: { select: { unitNo: true, project: { select: { name: true } } } },
             },
           },
         },
@@ -91,7 +93,7 @@ export async function recordPayment(
     };
   }
 
-  const sale = installment.paymentPlan.sale;
+  const project = installment.paymentPlan.project;
   const totalPaid = alreadyPaid + amountReceived;
   const nextStatus = computeInstallmentStatus(
     { amount, dueDate: installment.dueDate },
@@ -134,7 +136,7 @@ export async function recordPayment(
         userId: accounts.id,
         action: 'PAYMENT_RECEIVED',
         metadata: {
-          saleId: sale.id,
+          projectId: project.id,
           installmentId,
           installmentLabel: installment.label,
           amountReceived: String(amountReceived),
@@ -146,13 +148,13 @@ export async function recordPayment(
       });
 
       await notify({
-        userId: sale.customer.userId,
+        userId: project.customer.userId,
         type: 'PAYMENT_DUE',
         message: `${formatBDT(amountReceived)} জমা হয়েছে (${installment.label}) — রসিদ ${payment.receiptNo}`,
         link: `/receipts/${payment.id}`,
       });
 
-      revalidatePayments(sale.id);
+      revalidatePayments(project.id);
 
       const left = remaining - amountReceived;
       return {
@@ -219,21 +221,21 @@ export async function runOverdueSweep(): Promise<ActionResult> {
 }
 
 /**
- * এই মুহূর্তে বকেয়া/আসন্ন কিস্তির তালিকা — পেমেন্ট এন্ট্রি ডায়ালগের ড্রপডাউন
- * সেল বদলালে এটি ডেকে কিস্তিগুলো আনে।
+ * এই মুহূর্তে বকেয়া/আসন্ন কিস্তির তালিকা — পেমেন্ট এন্ট্রি ডায়ালগের ড্রপডাউনে
+ * প্রজেক্ট বদলালে এটি ডেকে কিস্তিগুলো আনে।
  */
 export async function listPayableInstallments(
-  saleId: string,
+  projectId: string,
 ): Promise<ActionResult<{ installments: PayableInstallment[] }>> {
   const accounts = await getAuthorizedUser('payment:create');
   if (!accounts) return FORBIDDEN;
 
-  // `saleId` ক্লায়েন্ট থেকে আসা কাঁচা string — Prisma তে বসানোর আগে যাচাই
-  const parsed = saleIdSchema.safeParse({ saleId });
-  if (!parsed.success) return { ok: false, message: 'সেলটি শনাক্ত করা যায়নি' };
+  // `projectId` ক্লায়েন্ট থেকে আসা কাঁচা string — Prisma তে বসানোর আগে যাচাই
+  const parsed = projectIdSchema.safeParse({ projectId });
+  if (!parsed.success) return { ok: false, message: 'প্রজেক্টটি শনাক্ত করা যায়নি' };
 
   const rows = await prisma.installment.findMany({
-    where: { paymentPlan: { saleId: parsed.data.saleId } },
+    where: { paymentPlan: { projectId: parsed.data.projectId } },
     select: {
       id: true,
       label: true,

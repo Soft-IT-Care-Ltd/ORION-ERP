@@ -36,32 +36,32 @@ import { listPayableInstallments, recordPayment, type PayableInstallment } from 
  * দিয়ে সাবমিট করলে Payment রেকর্ড তৈরি হয়, কিস্তির স্ট্যাটাস আপডেট হয় এবং
  * প্রিন্টযোগ্য রসিদের লিংক আসে।
  *
- * দুই জায়গা থেকে খোলে — শিডিউল পেজে নির্দিষ্ট কিস্তির বিপরীতে (তখন সেল ও কিস্তি
- * আগেই বাছা), আর পেমেন্ট পেজে যেকোনো সেল বেছে নিয়ে।
+ * দুই জায়গা থেকে খোলে — শিডিউল পেজে নির্দিষ্ট কিস্তির বিপরীতে (তখন প্রজেক্ট ও
+ * কিস্তি আগেই বাছা), আর পেমেন্ট পেজে যেকোনো প্রজেক্ট বেছে নিয়ে।
  */
 
-export type SaleOption = { id: string; label: string; customerName: string };
+export type ProjectOption = { id: string; label: string; customerName: string };
 
 export function PaymentEntryDialog({
   open,
   onOpenChange,
-  sales,
-  /** শুরুতেই বাছা সেল (শিডিউল পেজ থেকে খুললে) */
-  initialSaleId,
+  projects,
+  /** শুরুতেই বাছা প্রজেক্ট (শিডিউল পেজ থেকে খুললে) */
+  initialProjectId,
   /** শুরুতেই বাছা কিস্তি */
   initialInstallmentId,
-  /** initialSaleId এর কিস্তিগুলো — থাকলে প্রথমবার আর server call লাগে না */
+  /** initialProjectId এর কিস্তিগুলো — থাকলে প্রথমবার আর server call লাগে না */
   initialInstallments,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  sales: SaleOption[];
-  initialSaleId?: string;
+  projects: ProjectOption[];
+  initialProjectId?: string;
   initialInstallmentId?: string;
   initialInstallments?: PayableInstallment[];
 }) {
   const router = useRouter();
-  const [saleId, setSaleId] = useState(initialSaleId ?? sales[0]?.id ?? '');
+  const [projectId, setProjectId] = useState(initialProjectId ?? projects[0]?.id ?? '');
   const [installments, setInstallments] = useState<PayableInstallment[]>(
     initialInstallments ?? [],
   );
@@ -75,9 +75,9 @@ export function PaymentEntryDialog({
   const [pending, setPending] = useState(false);
   const [loading, startLoading] = useTransition();
   const [done, setDone] = useState<{ paymentId: string; receiptNo: string } | null>(null);
-  /** কোন সেলের কিস্তি তালিকা ইতিমধ্যে আনা হয়েছে — একই কল বারবার ঠেকাতে */
+  /** কোন প্রজেক্টের কিস্তি তালিকা ইতিমধ্যে আনা হয়েছে — একই কল বারবার ঠেকাতে */
   const [fetchedFor, setFetchedFor] = useState<string | null>(
-    initialInstallments ? (initialSaleId ?? null) : null,
+    initialInstallments ? (initialProjectId ?? null) : null,
   );
   /** সফল এন্ট্রি হয়েছে — ডায়ালগ বন্ধ করার সময় পেজটি রিফ্রেশ করতে হবে */
   const [needsRefresh, setNeedsRefresh] = useState(false);
@@ -87,7 +87,7 @@ export function PaymentEntryDialog({
   /**
    * ডায়ালগ খোলার মুহূর্তে ফর্ম পরিষ্কার।
    *
-   * ইচ্ছে করেই effect নয়। `initialInstallments`/`sales` প্রতিবার নতুন array হিসেবে
+   * ইচ্ছে করেই effect নয়। `initialInstallments`/`projects` প্রতিবার নতুন array হিসেবে
    * আসে, তাই parent যেকোনো কারণে রি-রেন্ডার হলেই effect আবার চলত এবং সফলতার
    * প্যানেলটি (রসিদের লিংকসহ) মুছে যেত। `open` এর transition ধরে render-এর
    * মধ্যেই রিসেট করলে ঠিক খোলার সময়ই — এবং কেবল তখনই — ফর্ম পরিষ্কার হয়।
@@ -107,21 +107,21 @@ export function PaymentEntryDialog({
       setReceiptNo('');
       setNote('');
       setPaidAt(format(new Date(), 'yyyy-MM-dd'));
-      setSaleId(initialSaleId ?? sales[0]?.id ?? '');
+      setProjectId(initialProjectId ?? projects[0]?.id ?? '');
       setInstallments(startRows);
       setInstallmentId(initialInstallmentId ?? '');
       // প্রি-সিলেক্ট করা কিস্তির পুরো বাকি টাকা ডিফল্টে বসে
       setAmount(preset ? String(preset.remaining) : '');
-      setFetchedFor(initialInstallments ? (initialSaleId ?? null) : null);
+      setFetchedFor(initialInstallments ? (initialProjectId ?? null) : null);
       setNeedsRefresh(false);
     }
   }
 
-  /** একটি সেলের পরিশোধযোগ্য কিস্তি এনে ড্রপডাউনে বসানো */
-  const fetchInstallments = useCallback((nextSaleId: string, preferId?: string) => {
-    setFetchedFor(nextSaleId);
+  /** একটি প্রজেক্টের পরিশোধযোগ্য কিস্তি এনে ড্রপডাউনে বসানো */
+  const fetchInstallments = useCallback((nextProjectId: string, preferId?: string) => {
+    setFetchedFor(nextProjectId);
     startLoading(async () => {
-      const result = await listPayableInstallments(nextSaleId);
+      const result = await listPayableInstallments(nextProjectId);
       if (!result.ok) {
         toast.error(result.message);
         setInstallments([]);
@@ -142,26 +142,26 @@ export function PaymentEntryDialog({
   }, []);
 
   /**
-   * সেল আগেই বাছা কিন্তু কিস্তির তালিকা সঙ্গে আসেনি — পেমেন্ট পেজের সারি থেকে
-   * খুললে এমনই হয় (সব সেলের কিস্তি আগেভাগে পাঠানো অপচয় হতো)। তখন খোলার পর
+   * প্রজেক্ট আগেই বাছা কিন্তু কিস্তির তালিকা সঙ্গে আসেনি — পেমেন্ট পেজের সারি
+   * থেকে খুললে এমনই হয় (সব প্রজেক্টের কিস্তি আগেভাগে পাঠানো অপচয় হতো)। তখন খোলার পর
    * তালিকাটি আনা হয়।
    */
   useEffect(() => {
-    if (!open || !saleId || fetchedFor === saleId) return;
-    fetchInstallments(saleId, initialInstallmentId);
-  }, [open, saleId, fetchedFor, initialInstallmentId, fetchInstallments]);
+    if (!open || !projectId || fetchedFor === projectId) return;
+    fetchInstallments(projectId, initialInstallmentId);
+  }, [open, projectId, fetchedFor, initialInstallmentId, fetchInstallments]);
 
-  /** ব্যবহারকারী ড্রপডাউনে সেল বদলালে */
-  function loadInstallments(nextSaleId: string) {
-    setSaleId(nextSaleId);
+  /** ব্যবহারকারী ড্রপডাউনে প্রজেক্ট বদলালে */
+  function loadInstallments(nextProjectId: string) {
+    setProjectId(nextProjectId);
     setInstallmentId('');
     setAmount('');
-    if (!nextSaleId) {
+    if (!nextProjectId) {
       setInstallments([]);
       setFetchedFor(null);
       return;
     }
-    fetchInstallments(nextSaleId);
+    fetchInstallments(nextProjectId);
   }
 
   function onInstallmentChange(nextId: string) {
@@ -246,21 +246,21 @@ export function PaymentEntryDialog({
           </div>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">
-            {sales.length > 1 || !initialSaleId ? (
+            {projects.length > 1 || !initialProjectId ? (
               <div className="space-y-2">
-                <Label htmlFor="pay-sale">সেল / ইউনিট</Label>
+                <Label htmlFor="pay-project">প্রজেক্ট</Label>
                 <NativeSelect
-                  id="pay-sale"
-                  value={saleId}
+                  id="pay-project"
+                  value={projectId}
                   onChange={(e) => loadInstallments(e.target.value)}
                   required
                 >
                   <option value="" disabled>
-                    — সেল নির্বাচন করুন —
+                    — প্রজেক্ট নির্বাচন করুন —
                   </option>
-                  {sales.map((sale) => (
-                    <option key={sale.id} value={sale.id}>
-                      {sale.customerName} — {sale.label}
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.customerName} — {project.label}
                     </option>
                   ))}
                 </NativeSelect>
@@ -402,8 +402,8 @@ function FieldError({ message }: { message?: string }) {
 
 /** ডায়ালগ খোলার বোতাম — শিডিউল টেবিলের সারিতে ও পেজ হেডারে বসে */
 export function PaymentEntryButton({
-  sales,
-  initialSaleId,
+  projects,
+  initialProjectId,
   initialInstallmentId,
   initialInstallments,
   label = 'পেমেন্ট এন্ট্রি',
@@ -411,8 +411,8 @@ export function PaymentEntryButton({
   variant = 'default',
   className,
 }: {
-  sales: SaleOption[];
-  initialSaleId?: string;
+  projects: ProjectOption[];
+  initialProjectId?: string;
   initialInstallmentId?: string;
   initialInstallments?: PayableInstallment[];
   label?: string;
@@ -431,8 +431,8 @@ export function PaymentEntryButton({
       <PaymentEntryDialog
         open={open}
         onOpenChange={setOpen}
-        sales={sales}
-        initialSaleId={initialSaleId}
+        projects={projects}
+        initialProjectId={initialProjectId}
         initialInstallmentId={initialInstallmentId}
         initialInstallments={initialInstallments}
       />

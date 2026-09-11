@@ -16,7 +16,7 @@ import { CHART_COLOR, CHART_TOOLTIP_STYLE, type ProjectProgressRow } from '@/lib
 /**
  * PRD সেকশন ৫.৭ — Project-wise progress overview।
  *
- * প্রতিটি বার একটি প্রজেক্ট, দৈর্ঘ্য তার ইউনিটগুলোর গড় % complete
+ * প্রতিটি বার একটি প্রজেক্ট, দৈর্ঘ্য তার ফেজগুলোর সময়-ভারিত গড় % complete
  * (`lib/report-data.ts` → `loadProjectProgress`)। অক্ষ ০–১০০ তে স্থির, তাই
  * প্রজেক্টগুলো একে অপরের সাথে তুলনীয় থাকে।
  *
@@ -67,7 +67,7 @@ export function ProjectProgressChart({ rows }: { rows: ProjectProgressRow[] }) {
             const row = item?.payload as ProjectProgressRow | undefined;
             const delayed = row?.delayedPhases ? ` · ${row.delayedPhases} টি ফেজ বিলম্বিত` : '';
             return [
-              `${value}% সম্পন্ন · ${row?.unitCount ?? 0} টি ইউনিট (${row?.doneUnits ?? 0} টি শেষ)${delayed}`,
+              `${value}% সম্পন্ন · ${row?.phaseCount ?? 0} টি ফেজ (${row?.donePhases ?? 0} টি শেষ)${delayed}`,
               row?.name ?? '',
             ];
           }}

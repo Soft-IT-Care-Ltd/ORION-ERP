@@ -1,6 +1,11 @@
-// Orion Builders CRM/ERP — Prisma Schema
+// Orion Builders CRM/ERP — Prisma Schema (v2 — construction service model)
 // Source of truth: ../03_schema.prisma (keep both in sync)
-// Run: npx prisma migrate dev --name init
+//
+// v2 change: multi-unit "Project → Unit[] → Sale" (real-estate developer model) সরিয়ে
+// সরাসরি "Lead → Project" (এক ক্লায়েন্ট = এক কনস্ট্রাকশন জব)। Unit, Sale, UnitStatus,
+// SaleStatus মুছে ফেলা হয়েছে; LeadChecklistItem ও LedgerEntry যোগ হয়েছে।
+//
+// Run: npx prisma migrate dev --name business-model-v2
 
 generator client {
   provider = "prisma-client-js"
@@ -19,14 +24,20 @@ enum Role {
   CUSTOMER
 }
 
+/// PRD সেকশন ৫.১ — কনস্ট্রাকশন সার্ভিসের প্রি-প্রজেক্ট পাইপলাইন।
+/// DIGITAL_SURVEY ও SOIL_TEST conditional — সব লিডে লাগে না, skip করা যায়।
 enum LeadStage {
-  NEW
-  CONTACTED
+  INQUIRY
+  DISCUSSION
   SITE_VISIT_SCHEDULED
   SITE_VISIT_DONE
+  DIGITAL_SURVEY
+  SOIL_TEST
+  DESIGN_IN_PROGRESS
+  DESIGN_APPROVED
+  QUOTATION_SENT
+  GOVT_APPROVAL
   NEGOTIATION
-  BOOKING
-  SALE_AGREEMENT_SIGNED
   WON
   LOST
 }
@@ -49,24 +60,28 @@ enum LeadSource {
   OTHER
 }
 
+/// ক্লায়েন্ট যে ধরনের বাড়ি বানাতে চান — PRD সেকশন ৫.১
+enum BuildingType {
+  DUPLEX
+  ONE_STORY
+  TWO_STORY
+  THREE_STORY
+  FOUR_STORY
+  FIVE_PLUS_STORY
+  OTHER
+}
+
+enum ChecklistStatus {
+  PENDING
+  DONE
+}
+
 enum LeadFileType {
   FLOOR_PLAN
   THREE_D_DESIGN
   PROPOSAL
   LAND_DOCUMENT
   OTHER
-}
-
-enum UnitStatus {
-  AVAILABLE
-  BOOKED
-  SOLD
-  ON_HOLD
-}
-
-enum SaleStatus {
-  DRAFT      // Lead "Won" থেকে অটো-তৈরি — PaymentPlan এখনো সেট হয়নি
-  CONFIRMED  // Accounts/Admin পেমেন্ট প্ল্যান দিয়ে কনফার্ম করেছে (Phase 4)
 }
 
 enum InstallmentStatus {
@@ -88,7 +103,7 @@ enum PaymentMethod {
 enum NotificationChannel {
   EMAIL
   SMS
-  // WhatsApp পরে যোগ হবে (PRD সেকশন ৫.৬) — তখন শুধু এই enum ও একটি transport লাগবে
+  // WhatsApp পরে যোগ হবে (PRD সেকশন ৫.৯) — তখন শুধু এই enum ও একটি transport লাগবে
 }
 
 enum DeliveryStatus {
@@ -105,6 +120,31 @@ enum PhaseStatus {
   DELAYED
 }
 
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+/// LedgerEntry এর category — pre-project service ও general expense/income উভয়ের জন্য
+enum LedgerCategory {
+  SITE_VISIT
+  DIGITAL_SURVEY
+  SOIL_TEST
+  DESIGN
+  GOVT_APPROVAL
+  CONSTRUCTION_INSTALLMENT
+  MATERIAL_COST
+  LABOR_COST
+  OFFICE_OVERHEAD
+  OTHER
+}
+
+enum LedgerType {
+  INCOME
+  EXPENSE
+}
+
 model User {
   id            String   @id @default(cuid())
   name          String
@@ -115,50 +155,70 @@ model User {
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
 
-  assignedLeads Lead[]        @relation("AssignedLeads")
-  leadActivities LeadActivity[] @relation("LeadActivityAuthor")
-  uploadedLeadDocuments LeadDocument[] @relation("LeadDocumentUploader")
-  uploadedSaleDocuments Document[]    @relation("SaleDocumentUploader")
-  phaseUpdates  PhaseUpdate[]
-  payments      Payment[]     @relation("ReceivedByUser")
-  customer      Customer?
-  notifications Notification[]
-  activityLogs  ActivityLog[]
+  assignedLeads         Lead[]              @relation("AssignedLeads")
+  leadActivities        LeadActivity[]      @relation("LeadActivityAuthor")
+  uploadedLeadDocuments LeadDocument[]      @relation("LeadDocumentUploader")
+  uploadedDocuments     Document[]          @relation("DocumentUploader")
+  checklistUpdates      LeadChecklistItem[] @relation("ChecklistDoneBy")
+  ledgerEntries         LedgerEntry[]       @relation("LedgerCreatedBy")
+  phaseUpdates          PhaseUpdate[]
+  payments              Payment[]           @relation("ReceivedByUser")
+  customer              Customer?
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
   // Site Engineer যেসব প্রজেক্টের দায়িত্বে (PRD সেকশন ৪ — "assigned project")
-  assignedProjects Project[]  @relation("AssignedProjects")
+  assignedProjects      Project[]           @relation("AssignedProjects")
 }
 
 model Lead {
-  id                   String     @id @default(cuid())
+  id                   String        @id @default(cuid())
   name                 String
-  phone                String     // E.164, international format সহ — e.g. +971501234567
-  residenceCountry     String?    // ISO 3166-1 alpha-2, প্রবাসী হলে বর্তমানে যে দেশে থাকে — e.g. "AE"
+  phone                String        // E.164, international format সহ — e.g. +971501234567
+  residenceCountry     String?       // ISO 3166-1 alpha-2, প্রবাসী হলে বর্তমানে যে দেশে থাকে
   email                String?
   source               LeadSource
-  interestedUnit       Unit?      @relation(fields: [unitId], references: [id])
-  unitId               String?
-  projectLocation      String?    // ক্লায়েন্টের জমি/প্রজেক্টের প্রকৃত অবস্থান
+  projectLocation      String?       // ক্লায়েন্টের নিজের জমির প্রকৃত অবস্থান
+  landSize             String?       // e.g. "৪ কাঠা" — free text, বাংলাদেশে একক বিভিন্ন হয়
+  buildingType         BuildingType?
   budgetMin            Decimal?
   budgetMax            Decimal?
-  stage                LeadStage  @default(NEW)
+  stage                LeadStage     @default(INQUIRY)
   lostReason           String?
-  assignedTo           User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedTo           User?         @relation("AssignedLeads", fields: [assignedToId], references: [id])
   assignedToId         String?
   nextFollowUpAt       DateTime?
   // প্রবাসী ক্লায়েন্টের বাংলাদেশে থাকা লোকাল কন্টাক্ট (যোগাযোগের সুবিধার জন্য)
   localContactName     String?
   localContactPhone    String?
-  localContactRelation String?    // e.g. "ভাই", "বন্ধু", "আত্মীয়"
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  localContactRelation String?       // e.g. "ভাই", "বন্ধু", "আত্মীয়"
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  activities           LeadActivity[]
-  documents            LeadDocument[]
-  sale                 Sale?
+  activities    LeadActivity[]
+  documents     LeadDocument[]
+  checklist     LeadChecklistItem[]
+  ledgerEntries LedgerEntry[]
+  project       Project?
 
   // পাইপলাইন বোর্ড ও ফলো-আপ কুয়েরির জন্য
   @@index([assignedToId, stage])
   @@index([nextFollowUpAt])
+}
+
+/// PRD সেকশন ৫.১ — প্রতিটি লিডের নিজস্ব checklist (fixed list না, টিম নিজেরাই যোগ করে)
+model LeadChecklistItem {
+  id        String          @id @default(cuid())
+  lead      Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String
+  label     String          // e.g. "সাইট ভিজিট সম্পন্ন", "সয়েল টেস্ট রিপোর্ট পাওয়া গেছে"
+  status    ChecklistStatus @default(PENDING)
+  note      String?
+  doneBy    User?           @relation("ChecklistDoneBy", fields: [doneById], references: [id])
+  doneById  String?
+  doneAt    DateTime?
+  createdAt DateTime        @default(now())
+
+  @@index([leadId, createdAt])
 }
 
 model LeadDocument {
@@ -190,40 +250,34 @@ model LeadActivity {
   @@index([leadId, createdAt])
 }
 
-model Project {
-  id          String   @id @default(cuid())
-  name        String
-  location    String
-  description String?
-  // নির্মাণ শুরুর তারিখ — টেমপ্লেট থেকে phase এর planned date হিসাব করার ভিত্তি
-  startDate   DateTime?
-  // দায়িত্বপ্রাপ্ত সাইট ইঞ্জিনিয়ার — এই প্রজেক্টের ইউনিটগুলোই তার "আমার সাইট" এ দেখাবে
-  engineer    User?    @relation("AssignedProjects", fields: [engineerId], references: [id])
-  engineerId  String?
-  createdAt   DateTime @default(now())
+// ── Accounts / Ledger ─────────────────────────────────────────────
+// একটাই মডেল দুই কাজে ব্যবহার হয় (PRD সেকশন ৫.৬):
+//  ১. leadId সেট থাকলে → client-wise entry (Lead detail/Project profile এ দেখা যাবে)
+//     - type=INCOME, clientVisible=true  → client portal এ বিল/রিসিট হিসেবে দেখাবে
+//     - type=EXPENSE                      → শুধু Admin/Accounts দেখবে, clientVisible সবসময় false
+//  ২. leadId null → company-wide general entry (office rent, salary ইত্যাদি), leadId ছাড়া
+//     কখনো client portal এ দেখানো হবে না
+model LedgerEntry {
+  id             String         @id @default(cuid())
+  lead           Lead?          @relation(fields: [leadId], references: [id])
+  leadId         String?
+  type           LedgerType
+  category       LedgerCategory @default(OTHER)
+  amount         Decimal
+  date           DateTime       @default(now())
+  note           String?
+  receiptNo      String?        @unique // শুধু client-facing income entry তে থাকবে
+  whatsappSentAt DateTime?
+  // EXPENSE এ কখনো true করা যাবে না — app-level ভ্যালিডেশনে enforce করা হয়
+  // (`lib/ledger.ts` → `ledgerWriteData`) এবং customer কুয়েরিতে দুটোই যাচাই হয়
+  clientVisible  Boolean        @default(false)
+  createdBy      User           @relation("LedgerCreatedBy", fields: [createdById], references: [id])
+  createdById    String
+  createdAt      DateTime       @default(now())
 
-  units       Unit[]
-  phaseTemplates PhaseTemplate[]
-
-  @@index([engineerId])
-}
-
-model Unit {
-  id         String     @id @default(cuid())
-  project    Project    @relation(fields: [projectId], references: [id])
-  projectId  String
-  unitNo     String
-  sizeSqft   Decimal?
-  price      Decimal
-  status     UnitStatus @default(AVAILABLE)
-
-  leads      Lead[]
-  sale       Sale?
-  phases     Phase[]
-
-  // একই প্রজেক্টে একই ইউনিট নম্বর দুবার থাকতে পারবে না
-  @@unique([projectId, unitNo])
-  @@index([projectId, status])
+  @@index([leadId, date])
+  @@index([type, date])
+  @@index([date])
 }
 
 model Customer {
@@ -234,62 +288,75 @@ model Customer {
   address   String?
   createdAt DateTime @default(now())
 
-  sales     Sale[]
+  projects  Project[]
 }
 
-model Sale {
-  id            String       @id @default(cuid())
-  lead          Lead?        @relation(fields: [leadId], references: [id])
-  leadId        String?      @unique
-  unit          Unit         @relation(fields: [unitId], references: [id])
-  unitId        String       @unique
-  customer      Customer     @relation(fields: [customerId], references: [id])
-  customerId    String
-  totalAmount   Decimal
-  saleDate      DateTime     @default(now())
-  // Won → sale কনভার্শন draft অবস্থায় তৈরি হয়; Accounts/Admin পেমেন্ট প্ল্যান
-  // সেট করে কনফার্ম করলে CONFIRMED হবে (PRD সেকশন ৫.১ — "draft mode")
-  status        SaleStatus   @default(DRAFT)
-  createdAt     DateTime     @default(now())
+/// এক ক্লায়েন্ট = এক কনস্ট্রাকশন জব (আগের multi-unit "Project → Unit → Sale" এর বদলে)
+model Project {
+  id                 String        @id @default(cuid())
+  lead               Lead          @relation(fields: [leadId], references: [id])
+  leadId             String        @unique
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  customerId         String
+  title              String        // e.g. "রহিম সাহেবের ডুপ্লেক্স — সোনাডাঙ্গা"
+  landLocation       String?
+  buildingType       BuildingType?
+  floors             Int?
+  totalSqft          Decimal?
+  ratePerSqft        Decimal?
+  totalContractValue Decimal
+  startDate          DateTime?
+  cameraStreamUrl    String?       // লাইভ CC ক্যামেরা — admin manually বসাবে (embed/HLS URL)
+  status             ProjectStatus @default(ACTIVE)
+  // দায়িত্বপ্রাপ্ত সাইট ইঞ্জিনিয়ার — PRD সেকশন ৪ ("assigned project") ও সেকশন ৮
+  // ("একজন engineer একাধিক প্রজেক্টে assign হতে পারবে")
+  engineer           User?         @relation("AssignedProjects", fields: [engineerId], references: [id])
+  engineerId         String?
+  createdAt          DateTime      @default(now())
 
-  paymentPlan   PaymentPlan?
-  documents     Document[]
+  paymentPlan PaymentPlan?
+  phases      Phase[]
+  documents   Document[]
 
-  // Accounts এর "পেমেন্ট প্ল্যান বাকি" তালিকার জন্য
-  @@index([status, saleDate])
+  @@index([engineerId])
+  @@index([status, createdAt])
 }
 
 model PaymentPlan {
-  id            String        @id @default(cuid())
-  sale          Sale          @relation(fields: [saleId], references: [id])
-  saleId        String        @unique
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt
+  id        String   @id @default(cuid())
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  installments  Installment[]
+  installments Installment[]
 }
 
 model Installment {
-  id             String             @id @default(cuid())
-  paymentPlan    PaymentPlan        @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
-  paymentPlanId  String
-  label          String             // e.g. "Booking Money", "Installment 1/20"
+  id            String            @id @default(cuid())
+  paymentPlan   PaymentPlan       @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  paymentPlanId String
+  // ঐচ্ছিক — "এই ফেজ শেষ হলে এই কিস্তি দিতে হবে" (PRD সেকশন ৫.৫)
+  phase         Phase?            @relation(fields: [phaseId], references: [id])
+  phaseId       String?
+  label         String            // e.g. "Signup Money", "Foundation Complete"
   // শিডিউলে দেখানোর ক্রম — একই দিনে একাধিক কিস্তি থাকলে dueDate দিয়ে সাজানো যেত না
-  order          Int                @default(0)
-  dueDate        DateTime
-  amount         Decimal
-  // টেমপ্লেট থেকে তৈরি হলে মোট মূল্যের শতকরা হার (PRD সেকশন ৫.৩ টেবিলের "%" কলাম)
-  percentage     Decimal?
+  order         Int               @default(0)
+  dueDate       DateTime
+  amount        Decimal
+  // টেমপ্লেট থেকে তৈরি হলে মোট কন্ট্রাক্ট ভ্যালুর শতকরা হার
+  percentage    Decimal?
   // `payments` যোগফল + dueDate থেকে হিসাব করে লেখা হয় (lib/payments.ts) —
   // কুয়েরি/aging রিপোর্টের সুবিধার্থে; UI সবসময় আজকের তারিখ ধরে আবার হিসাব করে নেয়
-  status         InstallmentStatus  @default(SCHEDULED)
+  status        InstallmentStatus @default(SCHEDULED)
 
-  payments       Payment[]
+  payments Payment[]
 
   @@index([paymentPlanId, order])
   // ওভারডিউ sweep ও aging রিপোর্টের কুয়েরি
   @@index([status, dueDate])
   @@index([dueDate])
+  @@index([phaseId])
 }
 
 model Payment {
@@ -309,72 +376,73 @@ model Payment {
   @@index([paidAt])
 }
 
+/// গ্লোবাল রিইউজেবল phase টেমপ্লেট (v2 তে আর কোনো প্রজেক্টের সাথে বাঁধা না) —
+/// Lead → Project কনভার্শনের সময় এখান থেকে কপি করে Phase রেকর্ড তৈরি হয়।
 model PhaseTemplate {
-  id         String   @id @default(cuid())
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectId  String
-  name       String   // e.g. "Foundation Work"
-  order      Int
+  id                  String @id @default(cuid())
+  name                String // e.g. "Foundation Work"
+  order               Int
   defaultDurationDays Int?
+
+  @@index([order])
+}
+
+model Phase {
+  id              String      @id @default(cuid())
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId       String
+  name            String
+  order           Int
+  // `percentComplete` + planned date থেকে হিসাব করে লেখা হয় (lib/phases.ts) —
+  // কুয়েরি/রিপোর্টের সুবিধার জন্য; UI সবসময় আজকের তারিখ ধরে আবার হিসাব করে নেয়
+  status          PhaseStatus @default(UPCOMING)
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+  percentComplete Int         @default(0)
+  // PRD সেকশন ৫.৪ — দেরির কারণ (থাকলে)
+  delayReason     String?
+
+  updates      PhaseUpdate[]
+  installments Installment[]
 
   @@index([projectId, order])
 }
 
-model Phase {
-  id             String      @id @default(cuid())
-  unit           Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  unitId         String
-  name           String
-  order          Int
-  // `percentComplete` + planned date থেকে হিসাব করে লেখা হয় (lib/phases.ts) —
-  // কুয়েরি/রিপোর্টের সুবিধার জন্য; UI সবসময় আজকের তারিখ ধরে আবার হিসাব করে নেয়
-  status         PhaseStatus @default(UPCOMING)
-  plannedStart   DateTime?
-  plannedEnd     DateTime?
-  actualStart    DateTime?
-  actualEnd      DateTime?
-  percentComplete Int        @default(0)
-  // PRD সেকশন ৫.২ — দেরির কারণ (থাকলে)
-  delayReason    String?
-
-  updates        PhaseUpdate[]
-
-  @@index([unitId, order])
-}
-
 model PhaseUpdate {
-  id          String   @id @default(cuid())
-  phase       Phase    @relation(fields: [phaseId], references: [id], onDelete: Cascade)
-  phaseId     String
-  updatedBy   User     @relation(fields: [updatedById], references: [id])
-  updatedById String
+  id              String   @id @default(cuid())
+  phase           Phase    @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  phaseId         String
+  updatedBy       User     @relation(fields: [updatedById], references: [id])
+  updatedById     String
   // এই আপডেটে যে % সেট করা হয়েছিল — টাইমলাইনের ইতিহাসে দেখানোর জন্য
   percentComplete Int?
-  note        String?
-  photoUrls   String[]
-  createdAt   DateTime @default(now())
+  note            String?
+  photoUrls       String[]
+  createdAt       DateTime @default(now())
 
   @@index([phaseId, createdAt])
 }
 
 model Document {
   id           String   @id @default(cuid())
-  sale         Sale?    @relation(fields: [saleId], references: [id])
-  saleId       String?
+  project      Project? @relation(fields: [projectId], references: [id])
+  projectId    String?
   // ফ্রি-টেক্সট, enum নয় — প্রজেক্টভেদে কাগজের নাম বদলায়। canonical তালিকা ও
-  // গ্রুপিং `lib/documents.ts` এ (e.g. "Booking Form", "Sale Agreement",
-  // "Allotment Letter", "Sale Deed", "Receipt")
+  // গ্রুপিং `lib/documents.ts` এ (e.g. "Contract", "Govt Approval Copy",
+  // "Receipt", "Handover Certificate")
   type         String
   fileUrl      String
   // আপলোডের সময়কার আসল নাম — ডিস্কের নাম UUID (`lib/upload.ts`), তাই তালিকায়
   // এটিই দেখানো হয় (LeadDocument এর মতোই)
   fileName     String
   description  String?
-  uploadedBy   User     @relation("SaleDocumentUploader", fields: [uploadedById], references: [id])
+  uploadedBy   User     @relation("DocumentUploader", fields: [uploadedById], references: [id])
   uploadedById String
   uploadedAt   DateTime @default(now())
 
-  @@index([saleId, uploadedAt])
+  @@index([projectId, uploadedAt])
 }
 
 model Notification {
@@ -431,7 +499,7 @@ model NotificationDelivery {
 
 model ActivityLog {
   id         String   @id @default(cuid())
-  entityType String   // e.g. "Lead", "Payment", "Phase"
+  entityType String   // e.g. "Lead", "Payment", "Phase", "LedgerEntry"
   entityId   String
   user       User     @relation(fields: [userId], references: [id])
   userId     String

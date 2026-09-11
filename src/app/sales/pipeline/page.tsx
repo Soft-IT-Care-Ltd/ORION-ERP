@@ -6,14 +6,7 @@ import { can } from '@/lib/rbac';
 import { findAssignableExecutives, leadScope } from '@/lib/lead-access';
 import { LEAD_SOURCES } from '@/lib/leads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  leadCardSelect,
-  startOfToday,
-  toPipelineLead,
-  toSaleUnitOption,
-  toUnitOption,
-  unitOptionSelect,
-} from '../leads/serialize';
+import { leadCardSelect, startOfToday, toPipelineLead } from '../leads/serialize';
 import { NewLeadButton } from './new-lead-button';
 import { PipelineBoard } from './pipeline-board';
 import { PipelineFilter } from './pipeline-filter';
@@ -84,7 +77,7 @@ export default async function PipelinePage({
       : {}),
   };
 
-  const [rows, totalInScope, executives, units] = await Promise.all([
+  const [rows, totalInScope, executives] = await Promise.all([
     prisma.lead.findMany({
       where,
       select: leadCardSelect,
@@ -94,18 +87,10 @@ export default async function PipelinePage({
     }),
     prisma.lead.count({ where: leadScope(user) }),
     findAssignableExecutives(),
-    prisma.unit.findMany({
-      select: unitOptionSelect,
-      orderBy: [{ project: { name: 'asc' } }, { unitNo: 'asc' }],
-      take: 200,
-    }),
   ]);
 
   const today = startOfToday();
   const leads = rows.map((row) => toPipelineLead(row, today));
-  const unitOptions = units.map(toUnitOption);
-  // সেল কনফার্ম ডায়ালগে দাম ও স্ট্যাটাসও লাগে
-  const saleUnits = units.map(toSaleUnitOption);
   const filtered = Boolean(q || source || assignee);
 
   return (
@@ -119,7 +104,7 @@ export default async function PipelinePage({
           </p>
         </div>
         {can(user.role, 'lead:create') ? (
-          <NewLeadButton executives={executives} units={unitOptions} canAssign={viewAll} />
+          <NewLeadButton executives={executives} canAssign={viewAll} />
         ) : null}
       </div>
 
@@ -149,12 +134,13 @@ export default async function PipelinePage({
                 canAssign={viewAll}
                 canConvert={can(user.role, 'lead:convert')}
                 executives={executives}
-                units={unitOptions}
-                saleUnits={saleUnits}
               />
               <p className="text-xs text-muted-foreground">
                 কার্ডের বাঁ পাশের হ্যান্ডেল ধরে অন্য কলামে টেনে নিলে স্টেজ বদলাবে। মোবাইলে
                 কার্ডের <span className="font-medium">⋮</span> মেনু থেকেও স্টেজ পরিবর্তন করা যায়।
+                {' '}<span className="font-medium">ডিজিটাল সার্ভে</span> ও{' '}
+                <span className="font-medium">সয়েল টেস্ট</span> সব লিডে লাগে না — প্রয়োজন না হলে
+                ধাপ দুটি skip করা যায়।
                 {rows.length === BOARD_LIMIT ? ' (সর্বোচ্চ ৪০০টি দেখানো হয় — বাকিগুলো ফিল্টার করে দেখুন)' : ''}
               </p>
             </>

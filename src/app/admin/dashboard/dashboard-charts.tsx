@@ -77,7 +77,7 @@ export async function DashboardCharts({ funnelRange }: { funnelRange: FunnelRang
           <CardTitle className="text-base">প্রজেক্টের অগ্রগতি</CardTitle>
           <CardDescription>
             {projects.length > 0
-              ? `${projects.length} টি সক্রিয় প্রজেক্টের ইউনিট-গড় % complete`
+              ? `${projects.length} টি সক্রিয় প্রজেক্টের ফেজ-ভিত্তিক % complete`
               : 'ফেজ টাইমলাইন বসানো প্রজেক্টগুলোর গড় অগ্রগতি'}
           </CardDescription>
         </CardHeader>

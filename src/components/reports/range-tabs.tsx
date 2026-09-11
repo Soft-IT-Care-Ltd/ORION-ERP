@@ -13,20 +13,36 @@ export function RangeTabs({
   param,
   current,
   label = 'সময়সীমা',
+  extraParams,
 }: {
   basePath: string;
   /** কোন searchParam এ রেঞ্জটি যাবে — ড্যাশবোর্ডে `funnel`, রিপোর্টে `range` */
   param: string;
   current: FunnelRange;
   label?: string;
+  /**
+   * পাতার অন্য ফিল্টারগুলো — রেঞ্জ বদলালেও যেন হারিয়ে না যায় (যেমন সেলস
+   * পারফরম্যান্স পাতার `executive`)। খালি/undefined মান বাদ পড়ে।
+   */
+  extraParams?: Record<string, string | undefined>;
 }) {
+  const hrefFor = (range: FunnelRange) => {
+    const query = new URLSearchParams();
+    // ডিফল্ট রেঞ্জে প্যারামিটার বাদ — URL পরিষ্কার থাকে
+    if (range !== 'month') query.set(param, range);
+    for (const [key, value] of Object.entries(extraParams ?? {})) {
+      if (value) query.set(key, value);
+    }
+    const search = query.toString();
+    return search ? `${basePath}?${search}` : basePath;
+  };
+
   return (
     <nav className="flex shrink-0 gap-1 rounded-md bg-muted p-1 print:hidden" aria-label={label}>
       {FUNNEL_RANGES.map((range) => (
         <Link
           key={range}
-          // ডিফল্ট রেঞ্জে প্যারামিটার বাদ — URL পরিষ্কার থাকে
-          href={range === 'month' ? basePath : `${basePath}?${param}=${range}`}
+          href={hrefFor(range)}
           scroll={false}
           aria-current={range === current ? 'page' : undefined}
           className={cn(

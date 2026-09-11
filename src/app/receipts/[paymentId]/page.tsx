@@ -13,6 +13,7 @@ import {
   PAYMENT_METHOD_LABEL,
   computeInstallmentStatus,
 } from '@/lib/payments';
+import { buildingTypeLabel } from '@/lib/leads';
 import { formatBDT } from '@/lib/utils';
 import { PrintButton } from '@/components/print-button';
 
@@ -63,22 +64,19 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
               installments: {
                 select: { amount: true, payments: { select: { amountReceived: true } } },
               },
-              sale: {
+              project: {
                 select: {
                   id: true,
-                  totalAmount: true,
+                  title: true,
+                  landLocation: true,
+                  buildingType: true,
+                  totalSqft: true,
+                  totalContractValue: true,
                   customer: {
                     select: {
                       address: true,
                       userId: true,
                       user: { select: { name: true, phone: true, email: true } },
-                    },
-                  },
-                  unit: {
-                    select: {
-                      unitNo: true,
-                      sizeSqft: true,
-                      project: { select: { name: true, location: true } },
                     },
                   },
                 },
@@ -91,10 +89,10 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
   });
   if (!payment) notFound();
 
-  const sale = payment.installment.paymentPlan.sale;
+  const project = payment.installment.paymentPlan.project;
 
   // কাস্টমার শুধু নিজের রসিদ — অন্যের payment id গেস করেও দেখা যাবে না
-  const isOwner = sale.customer.userId === user.id;
+  const isOwner = project.customer.userId === user.id;
   if (!can(user.role, 'receipt:generate') && !isOwner) notFound();
 
   const now = new Date();
@@ -119,7 +117,7 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
   );
 
   const backHref = can(user.role, 'receipt:generate')
-    ? `/accounts/schedule/${sale.id}`
+    ? `/accounts/schedule/${project.id}`
     : '/customer/payments';
 
   return (
@@ -164,27 +162,30 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
           </div>
         </header>
 
-        {/* ------------------------------------------------- কাস্টমার/ইউনিট */}
+        {/* ---------------------------------------------- কাস্টমার/প্রজেক্ট */}
         <section className="grid gap-4 border-b py-4 sm:grid-cols-2">
           <Block title="গ্রাহক (Received From)">
-            <p className="font-medium">{sale.customer.user.name}</p>
-            {sale.customer.user.phone ? <p>{sale.customer.user.phone}</p> : null}
-            <p className="text-muted-foreground">{sale.customer.user.email}</p>
-            {sale.customer.address ? (
-              <p className="text-muted-foreground">{sale.customer.address}</p>
+            <p className="font-medium">{project.customer.user.name}</p>
+            {project.customer.user.phone ? <p>{project.customer.user.phone}</p> : null}
+            <p className="text-muted-foreground">{project.customer.user.email}</p>
+            {project.customer.address ? (
+              <p className="text-muted-foreground">{project.customer.address}</p>
             ) : null}
           </Block>
 
-          <Block title="ইউনিট (Property)">
-            <p className="font-medium">
-              {sale.unit.project.name} — {sale.unit.unitNo}
-            </p>
-            <p className="text-muted-foreground">{sale.unit.project.location}</p>
-            {sale.unit.sizeSqft ? (
-              <p className="text-muted-foreground">{Number(sale.unit.sizeSqft)} sqft</p>
+          <Block title="প্রজেক্ট (Construction Job)">
+            <p className="font-medium">{project.title}</p>
+            {project.landLocation ? (
+              <p className="text-muted-foreground">{project.landLocation}</p>
+            ) : null}
+            {buildingTypeLabel(project.buildingType) ? (
+              <p className="text-muted-foreground">{buildingTypeLabel(project.buildingType)}</p>
+            ) : null}
+            {project.totalSqft ? (
+              <p className="text-muted-foreground">{Number(project.totalSqft)} sqft</p>
             ) : null}
             <p className="text-muted-foreground">
-              সেল ভ্যালু {formatBDT(Number(sale.totalAmount))}
+              কন্ট্রাক্ট ভ্যালু {formatBDT(Number(project.totalContractValue))}
             </p>
           </Block>
         </section>

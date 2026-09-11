@@ -1,22 +1,61 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
-import { Building2, HardHat, MapPin } from 'lucide-react';
+import { HardHat, MapPin, UserRound, Video } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { findAssignableEngineers, phaseProgressSelect } from '@/lib/project-access';
 import { summarizePhases } from '@/lib/phases';
-import { UNIT_STATUS_LABEL } from '@/lib/sales';
-import { formatBDT } from '@/lib/utils';
+import { buildingTypeLabel } from '@/lib/leads';
+import { PROJECT_STATUS_BADGE, PROJECT_STATUS_LABEL } from '@/lib/projects';
+import { cn, formatBDT } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhaseProgressBar } from '@/components/phase-timeline';
-import { NewProjectButton } from './new-project-button';
 import { ProjectRowActions } from './project-row-actions';
-import type { EngineerOption } from './project-form-dialog';
+import type { EditableProject, EngineerOption } from './project-edit-dialog';
 
-export const metadata = { title: 'প্রজেক্ট ও ইউনিট' };
+export const metadata = { title: 'প্রজেক্ট' };
 
+export const dynamic = 'force-dynamic';
+
+/** DB সারি → এডিট ডায়ালগের ফর্ম-মান (সব string) */
+function toEditable(project: {
+  id: string;
+  title: string;
+  landLocation: string | null;
+  buildingType: EditableProject['buildingType'];
+  floors: number | null;
+  totalSqft: unknown;
+  ratePerSqft: unknown;
+  totalContractValue: unknown;
+  startDate: Date | null;
+  cameraStreamUrl: string | null;
+  status: EditableProject['status'];
+  engineerId: string | null;
+}): EditableProject {
+  return {
+    id: project.id,
+    title: project.title,
+    landLocation: project.landLocation,
+    buildingType: project.buildingType,
+    floors: project.floors === null ? null : String(project.floors),
+    totalSqft: project.totalSqft === null ? null : String(Number(project.totalSqft)),
+    ratePerSqft: project.ratePerSqft === null ? null : String(Number(project.ratePerSqft)),
+    totalContractValue: String(Number(project.totalContractValue)),
+    startDate: project.startDate ? format(project.startDate, 'yyyy-MM-dd') : null,
+    cameraStreamUrl: project.cameraStreamUrl,
+    status: project.status,
+    engineerId: project.engineerId,
+  };
+}
+
+/**
+ * সব কনস্ট্রাকশন প্রজেক্ট — v2 তে এক প্রজেক্ট = এক ক্লায়েন্টের একটি জব।
+ *
+ * নতুন প্রজেক্ট এখান থেকে তৈরি হয় না: লিড "Won" হলে সেলস পাইপলাইন থেকেই
+ * কনভার্শনের সময় তৈরি হয় (PRD সেকশন ৫.৩)।
+ */
 export default async function ProjectsPage() {
   const admin = await getAuthorizedUser('project:manage');
   if (!admin) redirect('/');
@@ -27,21 +66,21 @@ export default async function ProjectsPage() {
     prisma.project.findMany({
       select: {
         id: true,
-        name: true,
-        location: true,
-        description: true,
+        title: true,
+        landLocation: true,
+        buildingType: true,
+        floors: true,
+        totalSqft: true,
+        ratePerSqft: true,
+        totalContractValue: true,
         startDate: true,
+        cameraStreamUrl: true,
+        status: true,
         engineerId: true,
         engineer: { select: { id: true, name: true } },
-        _count: { select: { units: true, phaseTemplates: true } },
-        units: {
-          select: {
-            id: true,
-            status: true,
-            price: true,
-            phases: { select: phaseProgressSelect, orderBy: { order: 'asc' } },
-          },
-        },
+        customer: { select: { user: { select: { name: true } } } },
+        lead: { select: { id: true } },
+        phases: { select: phaseProgressSelect, orderBy: { order: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -49,45 +88,38 @@ export default async function ProjectsPage() {
   ]);
 
   const engineers = engineerRows as EngineerOption[];
+  const totalValue = projects.reduce((sum, p) => sum + Number(p.totalContractValue), 0);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">প্রজেক্ট ও ইউনিট</h1>
+          <h1 className="text-xl font-semibold">প্রজেক্ট</h1>
           <p className="text-sm text-muted-foreground">
-            মোট {projects.length} টি প্রজেক্ট ·{' '}
-            {projects.reduce((sum, p) => sum + p._count.units, 0)} টি ইউনিট
+            মোট {projects.length} টি কনস্ট্রাকশন জব · কন্ট্রাক্ট ভ্যালু {formatBDT(totalValue)}
           </p>
         </div>
-        <NewProjectButton engineers={engineers} />
       </div>
 
       {projects.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Building2 className="h-8 w-8 text-muted-foreground" />
+            <HardHat className="h-8 w-8 text-muted-foreground" />
             <p className="font-medium">এখনো কোনো প্রজেক্ট নেই</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              প্রথম প্রজেক্ট তৈরি করুন — PRD সেকশন ৫.২ এর ডিফল্ট ৮টি ফেজ টেমপ্লেট সহ শুরু হবে।
+              প্রজেক্ট তৈরি হয় লিড &ldquo;Won&rdquo; হলে —{' '}
+              <Link href="/sales/pipeline" className="font-medium underline">
+                সেলস পাইপলাইন
+              </Link>{' '}
+              থেকে একটি লিড Won এ নিয়ে কন্ট্রাক্টের তথ্য দিন (PRD সেকশন ৫.৩)।
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {projects.map((project) => {
-            // প্রজেক্টের অগ্রগতি = ইউনিটগুলোর অগ্রগতির গড়
-            const unitSummaries = project.units.map((unit) => summarizePhases(unit.phases, now));
-            const withTimeline = unitSummaries.filter((s) => s.total > 0);
-            const progress =
-              withTimeline.length > 0
-                ? Math.round(
-                    withTimeline.reduce((sum, s) => sum + s.progress, 0) / withTimeline.length,
-                  )
-                : 0;
-            const delayedUnits = unitSummaries.filter((s) => s.delayedCount > 0).length;
-            const soldCount = project.units.filter((u) => u.status === 'SOLD').length;
-            const availableCount = project.units.filter((u) => u.status === 'AVAILABLE').length;
+            const summary = summarizePhases(project.phases, now);
+            const building = buildingTypeLabel(project.buildingType);
 
             return (
               <Card key={project.id} className="flex flex-col">
@@ -95,54 +127,74 @@ export default async function ProjectsPage() {
                   <div className="min-w-0 space-y-1">
                     <CardTitle className="text-base">
                       <Link href={`/admin/projects/${project.id}`} className="hover:underline">
-                        {project.name}
+                        {project.title}
                       </Link>
                     </CardTitle>
                     <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{project.location}</span>
+                      <UserRound className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{project.customer.user.name}</span>
                     </p>
+                    {project.landLocation ? (
+                      <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{project.landLocation}</span>
+                      </p>
+                    ) : null}
                   </div>
                   <ProjectRowActions
-                    project={{
-                      id: project.id,
-                      name: project.name,
-                      location: project.location,
-                      description: project.description,
-                      startDate: project.startDate
-                        ? format(project.startDate, 'yyyy-MM-dd')
-                        : null,
-                      engineerId: project.engineerId,
-                    }}
+                    project={toEditable(project)}
                     engineers={engineers}
-                    unitCount={project._count.units}
+                    phaseCount={project.phases.length}
                   />
                 </CardHeader>
 
                 <CardContent className="flex flex-1 flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <Badge variant="secondary">{project._count.units} ইউনিট</Badge>
-                    {availableCount > 0 ? (
-                      <Badge variant="outline">
-                        {availableCount} {UNIT_STATUS_LABEL.AVAILABLE}
-                      </Badge>
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-0.5 font-medium',
+                        PROJECT_STATUS_BADGE[project.status],
+                      )}
+                    >
+                      {PROJECT_STATUS_LABEL[project.status]}
+                    </span>
+                    {building ? <Badge variant="secondary">{building}</Badge> : null}
+                    {project.floors ? (
+                      <Badge variant="outline">{project.floors} তলা</Badge>
                     ) : null}
-                    {soldCount > 0 ? (
-                      <Badge variant="outline">
-                        {soldCount} {UNIT_STATUS_LABEL.SOLD}
-                      </Badge>
+                    {project.totalSqft ? (
+                      <Badge variant="outline">{Number(project.totalSqft)} sqft</Badge>
                     ) : null}
-                    <Badge variant="outline">{project._count.phaseTemplates} ফেজ টেমপ্লেট</Badge>
-                    {delayedUnits > 0 ? (
-                      <Badge variant="destructive">{delayedUnits} ইউনিট বিলম্বিত</Badge>
+                    {summary.delayedCount > 0 ? (
+                      <Badge variant="destructive">{summary.delayedCount} ফেজ বিলম্বিত</Badge>
+                    ) : null}
+                    {project.cameraStreamUrl ? (
+                      <Badge variant="outline" className="gap-1">
+                        <Video className="h-3 w-3" />
+                        লাইভ ক্যামেরা
+                      </Badge>
                     ) : null}
                   </div>
 
                   <div>
                     <p className="mb-1 text-xs text-muted-foreground">
-                      নির্মাণ অগ্রগতি (ইউনিটগুলোর গড়)
+                      নির্মাণ অগ্রগতি
+                      {summary.total > 0 ? ` · ${summary.doneCount}/${summary.total} ফেজ সম্পন্ন` : ''}
                     </p>
-                    <PhaseProgressBar progress={progress} />
+                    {summary.total === 0 ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-500">
+                        ফেজ টাইমলাইন নেই — প্রজেক্ট পেজ থেকে টেমপ্লেট প্রয়োগ করুন
+                      </p>
+                    ) : (
+                      <>
+                        <PhaseProgressBar progress={summary.progress} />
+                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {summary.current
+                            ? (summary.current.nameBn ?? summary.current.name)
+                            : 'সব ফেজ সম্পন্ন'}
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -151,11 +203,9 @@ export default async function ProjectsPage() {
                       <dd>{project.startDate ? format(project.startDate, 'dd MMM yyyy') : '—'}</dd>
                     </div>
                     <div className="flex min-w-0 gap-1.5">
-                      <dt className="shrink-0 text-muted-foreground">মোট মূল্য</dt>
+                      <dt className="shrink-0 text-muted-foreground">কন্ট্রাক্ট</dt>
                       <dd className="truncate">
-                        {formatBDT(
-                          project.units.reduce((sum, unit) => sum + Number(unit.price), 0),
-                        )}
+                        {formatBDT(Number(project.totalContractValue))}
                       </dd>
                     </div>
                   </dl>

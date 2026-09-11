@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,11 +38,11 @@ function firstMessage(invalid: ClientInvalid) {
 }
 
 /**
- * PRD সেকশন ৫.৩ — Payment Plan Builder।
+ * PRD সেকশন ৫.৫ — Payment Plan Builder।
  *
  * দুটি উপায়: (১) PRD এর স্যাম্পল টেমপ্লেট থেকে auto-generate, (২) হাতে কিস্তি
- * যোগ/এডিট (label, due date, amount)। দুটোই একই সেভ-পথে যায়, তাই ফলাফলের
- * শিডিউল দেখতে ও আচরণে এক।
+ * যোগ/এডিট (label, due date, amount, ঐচ্ছিক ফেজ লিংক)। দুটোই একই সেভ-পথে যায়,
+ * তাই ফলাফলের শিডিউল দেখতে ও আচরণে এক।
  *
  * যে কিস্তিতে টাকা জমা পড়েছে সেটি এখানে তালা-দেওয়া — মোছা যায় না (server ও
  * একই নিয়ম মানে, `accounts/schedule/actions.ts`)।
@@ -50,7 +51,18 @@ function firstMessage(invalid: ClientInvalid) {
 type Mode = 'template' | 'custom';
 
 /** হাতে-এডিট করা সারি — নতুন সারিতে `id` থাকে না */
-type Row = { key: string; id?: string; label: string; dueDate: string; amount: string };
+type Row = {
+  key: string;
+  id?: string;
+  label: string;
+  dueDate: string;
+  amount: string;
+  /** ঐচ্ছিক — "এই ফেজ শেষ হলে এই কিস্তি" (PRD সেকশন ৫.৫); খালি মানে লিংক নেই */
+  phaseId: string;
+};
+
+/** কিস্তির সঙ্গে লিংক করার মতো ফেজ */
+export type PhaseOption = { id: string; name: string; order: number };
 
 const dateValue = (date: Date) => format(date, 'yyyy-MM-dd');
 
@@ -73,23 +85,27 @@ function toRows(installments: InstallmentView[]): Row[] {
       label: i.label,
       dueDate: i.dueDateValue,
       amount: String(i.amount),
+      phaseId: i.phaseId ?? '',
     }));
 }
 
 export function PlanBuilder({
-  saleId,
+  projectId,
   totalAmount,
-  saleDate,
+  startDate,
   installments,
   lockedIds,
+  phases,
 }: {
-  saleId: string;
+  projectId: string;
   totalAmount: number;
-  /** সেলের তারিখ — টেমপ্লেটে বুকিং তারিখের ডিফল্ট ("yyyy-MM-dd") */
-  saleDate: string;
+  /** নির্মাণ শুরুর তারিখ — টেমপ্লেটে সাইনআপ তারিখের ডিফল্ট ("yyyy-MM-dd") */
+  startDate: string;
   installments: InstallmentView[];
   /** যেসব কিস্তিতে টাকা জমা পড়েছে — মোছা যাবে না */
   lockedIds: string[];
+  /** এই প্রজেক্টের ফেজগুলো — কিস্তির সঙ্গে লিংক করার ড্রপডাউন */
+  phases: PhaseOption[];
 }) {
   const router = useRouter();
   const hasPlan = installments.length > 0;
@@ -100,9 +116,9 @@ export function PlanBuilder({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   /* --------------------------------------------------- টেমপ্লেট ফর্ম state */
-  const initialDates = defaultPlanDates(parseDate(saleDate) ?? new Date());
+  const initialDates = defaultPlanDates(parseDate(startDate) ?? new Date());
   const [tpl, setTpl] = useState({
-    bookingDate: saleDate,
+    bookingDate: startDate,
     bookingPercent: String(DEFAULT_PLAN_TEMPLATE.bookingPercent),
     downPaymentPercent: String(DEFAULT_PLAN_TEMPLATE.downPaymentPercent),
     downPaymentDays: String(DEFAULT_PLAN_TEMPLATE.downPaymentDays),
@@ -119,7 +135,7 @@ export function PlanBuilder({
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  /** বুকিং তারিখ বা কিস্তি-সংখ্যা বদলালে বাকি তারিখগুলো আবার হিসাব করে বসে */
+  /** সাইনআপ তারিখ বা কিস্তি-সংখ্যা বদলালে বাকি তারিখগুলো আবার হিসাব করে বসে */
   function syncDates(patch: Partial<typeof tpl>) {
     setTpl((prev) => {
       const next = { ...prev, ...patch };
@@ -197,7 +213,7 @@ export function PlanBuilder({
   function addRow() {
     setRows((prev) => {
       const last = prev[prev.length - 1];
-      const base = last ? parseDate(last.dueDate) : parseDate(saleDate);
+      const base = last ? parseDate(last.dueDate) : parseDate(startDate);
       const due = base ? new Date(base.getFullYear(), base.getMonth() + 1, base.getDate()) : new Date();
       return [
         ...prev,
@@ -206,6 +222,7 @@ export function PlanBuilder({
           label: `Installment ${prev.length + 1}`,
           dueDate: dateValue(due),
           amount: '',
+          phaseId: '',
         },
       ];
     });
@@ -218,7 +235,7 @@ export function PlanBuilder({
   /* --------------------------------------------------------------- submit */
 
   async function onGenerate() {
-    const input = { saleId, ...tpl };
+    const input = { projectId, ...tpl };
 
     const check = validate(generatePlanSchema, input);
     if (!check.ok) {
@@ -243,12 +260,13 @@ export function PlanBuilder({
 
   async function onSaveCustom() {
     const input = {
-      saleId,
+      projectId,
       installments: rows.map((row) => ({
         id: row.id,
         label: row.label,
         dueDate: row.dueDate,
         amount: row.amount,
+        phaseId: row.phaseId,
       })),
     };
 
@@ -277,7 +295,7 @@ export function PlanBuilder({
           <div>
             <CardTitle className="text-base">পেমেন্ট প্ল্যান বিল্ডার</CardTitle>
             <CardDescription>
-              সেল ভ্যালু {formatBDT(totalAmount)} — টেমপ্লেট থেকে তৈরি করুন বা হাতে সাজান
+              কন্ট্রাক্ট ভ্যালু {formatBDT(totalAmount)} — টেমপ্লেট থেকে তৈরি করুন বা হাতে সাজান
             </CardDescription>
           </div>
           <div className="inline-flex rounded-md border p-0.5">
@@ -297,14 +315,14 @@ export function PlanBuilder({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field
                 id="tpl-booking-date"
-                label="বুকিং তারিখ"
+                label="সাইনআপ তারিখ"
                 type="date"
                 value={tpl.bookingDate}
                 onChange={(v) => syncDates({ bookingDate: v })}
               />
               <Field
                 id="tpl-booking-pct"
-                label="বুকিং মানি (%)"
+                label="সাইনআপ মানি (%)"
                 type="number"
                 step="0.1"
                 value={tpl.bookingPercent}
@@ -317,7 +335,7 @@ export function PlanBuilder({
                 step="0.1"
                 value={tpl.downPaymentPercent}
                 onChange={(v) => setTpl((p) => ({ ...p, downPaymentPercent: v }))}
-                hint={`বুকিংয়ের ${tpl.downPaymentDays} দিন পরে`}
+                hint={`সাইনআপের ${tpl.downPaymentDays} দিন পরে`}
               />
               <Field
                 id="tpl-down-days"
@@ -328,7 +346,7 @@ export function PlanBuilder({
               />
               <Field
                 id="tpl-agreement-pct"
-                label="সেল এগ্রিমেন্ট (%)"
+                label="কন্ট্রাক্ট সাইনিং (%)"
                 type="number"
                 step="0.1"
                 value={tpl.agreementPercent}
@@ -387,7 +405,7 @@ export function PlanBuilder({
                 <p className="mt-1 text-xs text-muted-foreground">
                   হ্যান্ডওভারে বসবে {handoverPercent}% ({formatBDT(preview.at(-1)?.amount ?? 0)}) —
                   PRD এর স্যাম্পল টেবিলের শতাংশগুলো যোগ করলে ৯০% হয়, তাই শেষ কিস্তিটি সবসময়{' '}
-                  <span className="font-medium">অবশিষ্ট</span> ধরা হয় যাতে যোগফল ঠিক সেল ভ্যালুর
+                  <span className="font-medium">অবশিষ্ট</span> ধরা হয় যাতে যোগফল ঠিক কন্ট্রাক্ট ভ্যালুর
                   সমান থাকে।
                 </p>
                 {preview.length > 0 ? (
@@ -410,8 +428,8 @@ export function PlanBuilder({
             {hasPlan ? (
               <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                এই সেলে আগেই {installments.length} টি কিস্তির শিডিউল আছে — টেমপ্লেট চালালে সেটি মুছে
-                নতুন শিডিউল বসবে।
+                এই প্রজেক্টে আগেই {installments.length} টি কিস্তির শিডিউল আছে — টেমপ্লেট চালালে
+                সেটি মুছে নতুন শিডিউল বসবে।
               </p>
             ) : null}
 
@@ -441,7 +459,7 @@ export function PlanBuilder({
                 return (
                   <div
                     key={row.key}
-                    className="grid grid-cols-1 gap-2 rounded-md border p-2 sm:grid-cols-[2rem_1fr_10rem_9rem_2.5rem] sm:items-end"
+                    className="grid grid-cols-1 gap-2 rounded-md border p-2 sm:grid-cols-[2rem_1fr_10rem_9rem_11rem_2.5rem] sm:items-end"
                   >
                     <span className="hidden pb-2.5 text-center text-xs text-muted-foreground tabular-nums sm:block">
                       {index + 1}
@@ -453,7 +471,7 @@ export function PlanBuilder({
                       <Input
                         id={`${row.key}-label`}
                         value={row.label}
-                        placeholder="যেমন: Booking Money"
+                        placeholder="যেমন: Signup Money"
                         onChange={(e) => updateRow(row.key, { label: e.target.value })}
                       />
                     </div>
@@ -482,6 +500,25 @@ export function PlanBuilder({
                         placeholder="0"
                         onChange={(e) => updateRow(row.key, { amount: e.target.value })}
                       />
+                    </div>
+                    {/* PRD সেকশন ৫.৫ — "এই ফেজ শেষ হলে এত টাকা" */}
+                    <div className="space-y-1">
+                      <Label htmlFor={`${row.key}-phase`} className="text-xs sm:sr-only">
+                        সংশ্লিষ্ট ফেজ
+                      </Label>
+                      <NativeSelect
+                        id={`${row.key}-phase`}
+                        value={row.phaseId}
+                        disabled={phases.length === 0}
+                        onChange={(e) => updateRow(row.key, { phaseId: e.target.value })}
+                      >
+                        <option value="">— ফেজ নেই —</option>
+                        {phases.map((phase) => (
+                          <option key={phase.id} value={phase.id}>
+                            {phase.order}. {phase.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
                     </div>
                     {isLocked ? (
                       <span
@@ -518,12 +555,12 @@ export function PlanBuilder({
                 {difference !== 0 ? (
                   <p className="text-xs font-medium text-destructive tabular-nums">
                     {difference > 0
-                      ? `সেল ভ্যালুর চেয়ে ${formatBDT(difference)} বেশি`
+                      ? `কন্ট্রাক্ট ভ্যালুর চেয়ে ${formatBDT(difference)} বেশি`
                       : `${formatBDT(-difference)} কম`}
                   </p>
                 ) : (
                   <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                    সেল ভ্যালুর সঙ্গে মিলেছে
+                    কন্ট্রাক্ট ভ্যালুর সঙ্গে মিলেছে
                   </p>
                 )}
               </div>

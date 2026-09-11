@@ -24,10 +24,9 @@ import {
   LeadFormDialog,
   type EditableLead,
   type ExecutiveOption,
-  type UnitOption,
 } from '../leads/lead-form-dialog';
 import { LostReasonDialog } from '../leads/lost-reason-dialog';
-import { WonSaleDialog, type SaleUnitOption } from '../leads/won-sale-dialog';
+import { WonProjectDialog } from '../leads/won-project-dialog';
 import { LeadCard, LeadCardPreview } from './lead-card';
 import { PipelineColumn } from './pipeline-column';
 import type { PipelineLead } from './types';
@@ -38,17 +37,13 @@ export function PipelineBoard({
   canAssign,
   canConvert,
   executives,
-  units,
-  saleUnits,
 }: {
   leads: PipelineLead[];
   canEdit: boolean;
   canAssign: boolean;
-  /** Won → সেল কনভার্শনের অনুমতি (`lead:convert`) */
+  /** Won → প্রজেক্ট কনভার্শনের অনুমতি (`lead:convert`) */
   canConvert: boolean;
   executives: ExecutiveOption[];
-  units: UnitOption[];
-  saleUnits: SaleUnitOption[];
 }) {
   const router = useRouter();
 
@@ -126,8 +121,8 @@ export function PipelineBoard({
         setPendingLost(lead);
         return;
       }
-      // PRD সেকশন ৫.১ — Won মানে সেল কনভার্শন: ইউনিট ও মূল্য নিশ্চিত করে তবেই স্টেজ বদলায়
-      if (stage === 'WON' && !lead.sale) {
+      // PRD সেকশন ৫.৩ — Won মানে প্রজেক্ট তৈরি: কন্ট্রাক্ট ভ্যালু নিশ্চিত করে তবেই স্টেজ বদলায়
+      if (stage === 'WON' && !lead.project) {
         if (!canConvert) {
           toast.error('Won এ নেওয়ার অনুমতি আপনার নেই');
           return;
@@ -201,7 +196,7 @@ export function PipelineBoard({
                     canConvert={canConvert}
                     onEdit={(l) => setEditing(l.editable)}
                     onChangeStage={requestStageChange}
-                    onConfirmSale={setPendingWon}
+                    onConvert={setPendingWon}
                   />
                 ))}
               </PipelineColumn>
@@ -228,22 +223,16 @@ export function PipelineBoard({
         }}
       />
 
-      <WonSaleDialog
+      <WonProjectDialog
         open={pendingWon !== null}
         onOpenChange={(open) => {
           if (!open) setPendingWon(null);
         }}
         lead={
           pendingWon
-            ? {
-                id: pendingWon.id,
-                name: pendingWon.name,
-                email: pendingWon.editable.email,
-                unitId: pendingWon.editable.unitId,
-              }
+            ? { id: pendingWon.id, name: pendingWon.name, email: pendingWon.editable.email }
             : null
         }
-        units={saleUnits}
         onConverted={() => setPendingWon(null)}
       />
 
@@ -255,7 +244,6 @@ export function PipelineBoard({
           }}
           lead={editing}
           executives={executives}
-          units={units}
           canAssign={canAssign}
         />
       ) : null}

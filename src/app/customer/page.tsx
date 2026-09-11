@@ -1,6 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { AlertTriangle, Building2, Camera, CreditCard, FileText, HardHat } from 'lucide-react';
+import {
+  AlertTriangle,
+  Camera,
+  CreditCard,
+  FileText,
+  HardHat,
+  Receipt,
+  Video,
+} from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { loadCustomerPortal } from '@/lib/customer-data';
 import { formatBDT } from '@/lib/utils';
@@ -8,15 +16,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PhaseTimeline } from '@/components/phase-timeline';
 import { PaymentHistory, PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
 import { DocumentGroupList } from '@/components/documents';
-import { UnitSummaryCard } from './unit-summary-card';
+import { LiveCameraCard } from './live-camera-card';
+import { ProjectSummaryCard } from './project-summary-card';
 
-export const metadata = { title: 'আমার ইউনিট' };
+export const metadata = { title: 'আমার প্রজেক্ট' };
+
+export const dynamic = 'force-dynamic';
 
 /**
- * PRD সেকশন ৫.৪ — কাস্টমার পোর্টালের ড্যাশবোর্ড।
+ * PRD সেকশন ৫.৭ — কাস্টমার পোর্টালের ড্যাশবোর্ড।
  *
- * এক পাতায় নিজের ইউনিটের সবটুকু: সারাংশ কার্ড, নির্মাণ টাইমলাইন, পেমেন্ট
- * শিডিউল, পরিশোধের ইতিহাস (প্রতিটির রসিদসহ) ও ডকুমেন্ট। পুরোটাই **read-only** —
+ * এক পাতায় নিজের প্রজেক্টের সবটুকু: সারাংশ কার্ড, লাইভ ক্যামেরা, নির্মাণ
+ * টাইমলাইন, পেমেন্ট শিডিউল, পরিশোধের ইতিহাস (প্রতিটির রসিদসহ), প্রি-প্রজেক্ট
+ * সার্ভিস বিল ও ডকুমেন্ট। পুরোটাই **read-only** —
  * টাইমলাইন ও শিডিউল কম্পোনেন্টে `actions` পাঠানো হয়নি, তাই কাস্টমার কিছু
  * বদলাতে পারেন না (PRD সেকশন ৪)।
  *
@@ -30,50 +42,66 @@ export default async function CustomerDashboardPage() {
   if (!session?.user) redirect('/login?callbackUrl=/customer');
 
   const now = new Date();
-  const units = await loadCustomerPortal(session.user.id, now);
+  const projects = await loadCustomerPortal(session.user.id, now);
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">আমার ইউনিট</h1>
+        <h1 className="text-xl font-semibold">আমার প্রজেক্ট</h1>
         <p className="text-sm text-muted-foreground">
           আপনার প্রজেক্টের অগ্রগতি, পেমেন্ট ও ডকুমেন্ট — সবকিছু এক জায়গায়
         </p>
       </div>
 
-      {units.length === 0 ? (
+      {projects.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Building2 className="h-8 w-8 text-muted-foreground" />
-            <p className="font-medium">এখনো কোনো ইউনিট যুক্ত হয়নি</p>
+            <HardHat className="h-8 w-8 text-muted-foreground" />
+            <p className="font-medium">এখনো কোনো প্রজেক্ট যুক্ত হয়নি</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              বুকিং সম্পন্ন হলে আপনার ইউনিটের সারাংশ, নির্মাণ অগ্রগতি ও পেমেন্ট শিডিউল এখানে
-              দেখা যাবে। কোনো প্রশ্ন থাকলে অফিসে যোগাযোগ করুন।
+              কন্ট্রাক্ট সাইন হলে আপনার প্রজেক্টের সারাংশ, নির্মাণ অগ্রগতি ও পেমেন্ট শিডিউল
+              এখানে দেখা যাবে। কোনো প্রশ্ন থাকলে অফিসে যোগাযোগ করুন।
             </p>
           </CardContent>
         </Card>
       ) : (
-        units.map(({ unit, timeline, plan, payments, documents }) => (
-          <section key={unit.saleId} aria-label={unit.label} className="space-y-3">
-            <UnitSummaryCard
-              unit={unit}
+        projects.map(({ project, timeline, plan, payments, preProjectBills, documents }) => (
+          <section key={project.projectId} aria-label={project.title} className="space-y-3">
+            <ProjectSummaryCard
+              project={project}
               constructionPercent={timeline.summary.progress}
               collectedPercent={plan.summary.collectedPercent}
             />
 
+            {/* PRD সেকশন ৫.৪ — লাইভ CC ক্যামেরা (URL সেট করা থাকলেই) */}
+            {project.cameraStreamUrl ? (
+              <LiveCameraCard url={project.cameraStreamUrl} title={project.title} />
+            ) : null}
+
             {/* মোবাইলে পাতাটি লম্বা — নিচের সেকশনগুলোতে দ্রুত যাওয়ার লিংক */}
-            <nav aria-label="এই ইউনিটের সেকশন" className="flex flex-wrap gap-1.5">
-              <JumpLink href={`#progress-${unit.saleId}`} icon={<HardHat className="h-3.5 w-3.5" />}>
+            <nav aria-label="এই প্রজেক্টের সেকশন" className="flex flex-wrap gap-1.5">
+              {project.cameraStreamUrl ? (
+                <JumpLink
+                  href={`#camera-${project.projectId}`}
+                  icon={<Video className="h-3.5 w-3.5" />}
+                >
+                  লাইভ ক্যামেরা
+                </JumpLink>
+              ) : null}
+              <JumpLink
+                href={`#progress-${project.projectId}`}
+                icon={<HardHat className="h-3.5 w-3.5" />}
+              >
                 নির্মাণ অগ্রগতি
               </JumpLink>
               <JumpLink
-                href={`#payments-${unit.saleId}`}
+                href={`#payments-${project.projectId}`}
                 icon={<CreditCard className="h-3.5 w-3.5" />}
               >
                 পেমেন্ট
               </JumpLink>
               <JumpLink
-                href={`#documents-${unit.saleId}`}
+                href={`#documents-${project.projectId}`}
                 icon={<FileText className="h-3.5 w-3.5" />}
               >
                 ডকুমেন্ট
@@ -81,7 +109,7 @@ export default async function CustomerDashboardPage() {
             </nav>
 
             {/* ------------------------------------------- নির্মাণ অগ্রগতি */}
-            <Card id={`progress-${unit.saleId}`} className="scroll-mt-20">
+            <Card id={`progress-${project.projectId}`} className="scroll-mt-20">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">নির্মাণ অগ্রগতি</CardTitle>
                 <CardDescription>
@@ -107,11 +135,11 @@ export default async function CustomerDashboardPage() {
             </Card>
 
             {/* ------------------------------------------ পেমেন্ট শিডিউল */}
-            <div id={`payments-${unit.saleId}`} className="scroll-mt-20 space-y-3">
+            <div id={`payments-${project.projectId}`} className="scroll-mt-20 space-y-3">
               <PaymentSummary
                 summary={plan.summary}
                 title="পেমেন্ট শিডিউল"
-                subtitle={`${unit.label} · মোট মূল্য ${formatBDT(unit.totalAmount)}`}
+                subtitle={`${project.title} · কন্ট্রাক্ট ভ্যালু ${formatBDT(project.totalContractValue)}`}
               />
 
               {plan.summary.overdueCount > 0 ? (
@@ -164,13 +192,50 @@ export default async function CustomerDashboardPage() {
               </Card>
             </div>
 
+            {/* PRD সেকশন ৫.২ — Won হওয়ার আগের সার্ভিস বিল (সয়েল টেস্ট, ডিজাইন …)।
+                শুধু আপনাকে দেওয়া বিলগুলোই — Orion এর নিজের খরচ এখানে কখনো আসে না। */}
+            {preProjectBills.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                    প্রি-প্রজেক্ট সার্ভিস বিল
+                  </CardTitle>
+                  <CardDescription>
+                    কনস্ট্রাকশন শুরুর আগে নেওয়া সার্ভিসগুলোর বিল ও রসিদ নম্বর
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y text-sm">
+                    {preProjectBills.map((bill) => (
+                      <li key={bill.id} className="flex items-start justify-between gap-3 py-2">
+                        <div className="min-w-0">
+                          <p className="font-medium">{bill.categoryLabel}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {bill.dateLabel}
+                            {bill.receiptNo ? ` · রসিদ ${bill.receiptNo}` : ''}
+                          </p>
+                          {bill.note ? (
+                            <p className="text-xs text-muted-foreground">{bill.note}</p>
+                          ) : null}
+                        </div>
+                        <span className="shrink-0 font-semibold tabular-nums">
+                          {bill.amountLabel}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {/* ------------------------------------------------ ডকুমেন্ট */}
-            <Card id={`documents-${unit.saleId}`} className="scroll-mt-20">
+            <Card id={`documents-${project.projectId}`} className="scroll-mt-20">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">ডকুমেন্ট</CardTitle>
                 <CardDescription>
-                  বুকিং ফর্ম, সেল এগ্রিমেন্ট, অ্যালটমেন্ট লেটার ও পেমেন্ট রসিদ — টাইপ অনুযায়ী
-                  সাজানো
+                  কনস্ট্রাকশন চুক্তি, সরকারি অনুমোদন কপি, ডিজাইন ড্রয়িং ও পেমেন্ট রসিদ — টাইপ
+                  অনুযায়ী সাজানো
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

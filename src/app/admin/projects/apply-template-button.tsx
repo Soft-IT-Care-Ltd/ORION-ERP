@@ -17,21 +17,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { validate } from '@/lib/validations/form';
 import { applyTemplateSchema } from '@/lib/validations/project';
-import { applyTemplateToUnits } from '../actions';
+import { applyTemplateToProject } from './actions';
 
 /**
- * টেমপ্লেট থেকে টাইমলাইন তৈরি — শুধু যেসব ইউনিটে এখনো ফেজ নেই সেগুলোতে।
- * অগ্রগতি থাকা ইউনিট ছোঁয়া হয় না, তাই বাটনটি নিরাপদে বারবার চাপা যায়।
+ * গ্লোবাল টেমপ্লেট থেকে টাইমলাইন তৈরি — শুধু যে প্রজেক্টে এখনো ফেজ নেই সেখানে।
+ *
+ * সাধারণত Lead → Won কনভার্শনেই ফেজগুলো তৈরি হয়ে যায়; এই বোতামটি সেই ক্ষেত্রের
+ * জন্য যেখানে কনভার্শনের সময় টেমপ্লেট খালি ছিল। অগ্রগতি থাকা প্রজেক্ট ছোঁয়া হয়
+ * না, তাই বোতামটি নিরাপদে চাপা যায়।
  */
 export function ApplyTemplateButton({
   projectId,
-  pendingUnits,
+  hasPhases,
   defaultStartDate,
   disabled,
 }: {
   projectId: string;
-  /** যত ইউনিটে এখনো টাইমলাইন নেই */
-  pendingUnits: number;
+  /** প্রজেক্টে আগেই ফেজ আছে কি না */
+  hasPhases: boolean;
   /** প্রজেক্টের startDate — "yyyy-MM-dd" */
   defaultStartDate: string | null;
   disabled?: boolean;
@@ -49,7 +52,7 @@ export function ApplyTemplateButton({
     }
 
     setPending(true);
-    const result = await applyTemplateToUnits({ projectId, startDate });
+    const result = await applyTemplateToProject({ projectId, startDate });
     setPending(false);
 
     if (result.ok) {
@@ -66,11 +69,11 @@ export function ApplyTemplateButton({
       <Button
         variant="outline"
         size="sm"
-        disabled={disabled || pendingUnits === 0}
+        disabled={disabled || hasPhases}
         onClick={() => setOpen(true)}
       >
         <CalendarRange className="mr-2 h-4 w-4" />
-        {pendingUnits > 0 ? `${pendingUnits} ইউনিটে টাইমলাইন তৈরি` : 'সব ইউনিটে টাইমলাইন আছে'}
+        {hasPhases ? 'টাইমলাইন আছে' : 'টেমপ্লেট থেকে টাইমলাইন তৈরি'}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -78,9 +81,8 @@ export function ApplyTemplateButton({
           <DialogHeader>
             <DialogTitle>টাইমলাইন তৈরি করুন</DialogTitle>
             <DialogDescription>
-              টেমপ্লেট থেকে {pendingUnits} টি ইউনিটে ফেজ তৈরি হবে। প্রতিটি ফেজ আগেরটির শেষের
-              পরদিন শুরু ধরে পরিকল্পিত তারিখ বসবে। যেসব ইউনিটে আগে থেকেই টাইমলাইন আছে সেগুলো
-              অপরিবর্তিত থাকবে।
+              গ্লোবাল ফেজ টেমপ্লেট থেকে এই প্রজেক্টের ফেজগুলো তৈরি হবে। প্রতিটি ফেজ আগেরটির
+              শেষের পরদিন শুরু ধরে পরিকল্পিত তারিখ বসবে।
             </DialogDescription>
           </DialogHeader>
 

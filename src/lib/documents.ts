@@ -1,5 +1,5 @@
 /**
- * Sale ডকুমেন্টের টাইপ, লেবেল ও গ্রুপিং — PRD সেকশন ৫.৪ ও ৫.৫।
+ * প্রজেক্ট ডকুমেন্টের টাইপ, লেবেল ও গ্রুপিং — PRD সেকশন ৫.৭ ও ৫.৮।
  *
  * `Document.type` স্কিমাতে ফ্রি-টেক্সট string (enum নয়), কারণ প্রতিটি প্রজেক্টে
  * কাগজের নাম আলাদা হতে পারে। তাই canonical তালিকাটা এখানে রাখা হয়েছে — অচেনা
@@ -11,39 +11,42 @@
 
 /** দেখানোর ক্রম — কাস্টমার যে ক্রমে কাগজগুলো হাতে পান */
 export const DOCUMENT_TYPES = [
-  'Booking Form',
-  'Sale Agreement',
-  'Allotment Letter',
-  'Sale Deed',
+  'Contract',
+  'Govt Approval Copy',
+  'Design Drawing',
+  'Land Document',
   'Receipt',
+  'Handover Certificate',
   'Other',
 ] as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
-  'Booking Form': 'বুকিং ফর্ম',
-  'Sale Agreement': 'সেল এগ্রিমেন্ট',
-  'Allotment Letter': 'অ্যালটমেন্ট লেটার',
-  'Sale Deed': 'সেল দলিল',
+  Contract: 'কনস্ট্রাকশন চুক্তি',
+  'Govt Approval Copy': 'সরকারি অনুমোদন কপি',
+  'Design Drawing': 'ডিজাইন / ড্রয়িং',
+  'Land Document': 'জমির দলিল',
   Receipt: 'পেমেন্ট রসিদ',
+  'Handover Certificate': 'হ্যান্ডওভার সার্টিফিকেট',
   Other: 'অন্যান্য',
 };
 
 /** গ্রুপ হেডারের ব্যাজ — `FILE_TYPE_BADGE` (lead documents) এর সমান্তরাল */
 export const DOCUMENT_TYPE_BADGE: Record<DocumentType, string> = {
-  'Booking Form': 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
-  'Sale Agreement': 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
-  'Allotment Letter': 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
-  'Sale Deed': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  Contract: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  'Govt Approval Copy': 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
+  'Design Drawing': 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300',
+  'Land Document': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
   Receipt: 'bg-orion-navy/10 text-orion-navy dark:bg-orion-gold/15 dark:text-orion-gold',
+  'Handover Certificate': 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
   Other: 'bg-muted text-muted-foreground',
 };
 
 /**
  * DB এর ফ্রি-টেক্সট টাইপ → canonical টাইপ।
  *
- * বানানভেদ (case, স্পেস, "Money Receipt"/"Deed of Sale") মিলিয়ে নেওয়া হয় যাতে
+ * বানানভেদ (case, স্পেস, "Money Receipt"/"RAJUK Approval") মিলিয়ে নেওয়া হয় যাতে
  * একই কাগজ দুটি আলাদা গ্রুপে ভাগ হয়ে না যায়।
  */
 export function normalizeDocumentType(raw: string): DocumentType {
@@ -52,11 +55,16 @@ export function normalizeDocumentType(raw: string): DocumentType {
   const exact = DOCUMENT_TYPES.find((type) => type.toLowerCase() === key);
   if (exact) return exact;
 
-  if (key.includes('booking')) return 'Booking Form';
-  if (key.includes('allot')) return 'Allotment Letter';
-  if (key.includes('deed')) return 'Sale Deed';
-  if (key.includes('agreement')) return 'Sale Agreement';
+  if (key.includes('contract') || key.includes('agreement')) return 'Contract';
+  if (key.includes('approval') || key.includes('rajuk') || key.includes('permit')) {
+    return 'Govt Approval Copy';
+  }
+  if (key.includes('drawing') || key.includes('design') || key.includes('plan')) {
+    return 'Design Drawing';
+  }
+  if (key.includes('land') || key.includes('deed') || key.includes('dolil')) return 'Land Document';
   if (key.includes('receipt') || key.includes('invoice')) return 'Receipt';
+  if (key.includes('handover') || key.includes('completion')) return 'Handover Certificate';
   return 'Other';
 }
 
@@ -69,11 +77,15 @@ export function fileExtLabel(fileUrl: string): string | null {
 
 /**
  * ডাউনলোডের ফাইলনেম। ডিস্কে নামগুলো UUID (`lib/upload.ts`), তাই কাস্টমারের
- * ডাউনলোড ফোল্ডারে অর্থবহ নাম যাতে থাকে — "Booking-Form-A-4.pdf"।
+ * ডাউনলোড ফোল্ডারে অর্থবহ নাম যাতে থাকে — "Contract-Rahim-Duplex.pdf"।
  */
-export function documentDownloadName(type: DocumentType, unitNo: string, fileUrl: string): string {
+export function documentDownloadName(
+  type: DocumentType,
+  projectRef: string,
+  fileUrl: string,
+): string {
   const ext = fileUrl.split('?')[0].split('.').pop();
-  const base = `${type}-${unitNo}`.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/-+/g, '-');
+  const base = `${type}-${projectRef}`.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/-+/g, '-');
   return ext && ext.length <= 5 ? `${base}.${ext.toLowerCase()}` : base;
 }
 

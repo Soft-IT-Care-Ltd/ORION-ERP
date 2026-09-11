@@ -12,9 +12,11 @@ import {
   Paperclip,
   Pencil,
   Phone,
-  Receipt,
+  Ruler,
   User2,
   Wallet,
+  HardHat,
+  ListChecks,
 } from 'lucide-react';
 import type { LeadStage } from '@prisma/client';
 import { cn } from '@/lib/utils';
@@ -32,12 +34,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  CONDITIONAL_STAGE_HINT,
   FOLLOW_UP_TONE_CLASS,
+  isConditionalStage,
   LEAD_STAGES,
   lostReasonLabel,
   STAGE_LABEL,
 } from '@/lib/leads';
-import { SALE_STATUS_BADGE, SALE_STATUS_HINT, SALE_STATUS_LABEL } from '@/lib/sales';
+import { PROJECT_STATUS_BADGE, PROJECT_STATUS_HINT, PROJECT_STATUS_LABEL } from '@/lib/projects';
 import type { PipelineLead } from './types';
 
 function CardBody({
@@ -47,7 +51,7 @@ function CardBody({
   pending,
   onEdit,
   onChangeStage,
-  onConfirmSale,
+  onConvert,
   dragHandle,
 }: {
   lead: PipelineLead;
@@ -56,11 +60,11 @@ function CardBody({
   pending: boolean;
   onEdit?: (lead: PipelineLead) => void;
   onChangeStage?: (lead: PipelineLead, stage: LeadStage) => void;
-  onConfirmSale?: (lead: PipelineLead) => void;
+  onConvert?: (lead: PipelineLead) => void;
   dragHandle?: React.ReactNode;
 }) {
-  // Won এ আছে অথচ সেল তৈরি হয়নি — মেনু থেকে কনভার্শনটি সেরে নেওয়া যায়
-  const needsSale = lead.stage === 'WON' && lead.sale === null;
+  // Won এ আছে অথচ প্রজেক্ট তৈরি হয়নি — মেনু থেকে কনভার্শনটি সেরে নেওয়া যায়
+  const needsProject = lead.stage === 'WON' && lead.project === null;
   return (
     <div
       className={cn(
@@ -97,10 +101,10 @@ function CardBody({
                   <Pencil className="mr-2 h-4 w-4" />
                   এডিট
                 </DropdownMenuItem>
-                {needsSale && canConvert ? (
-                  <DropdownMenuItem onSelect={() => onConfirmSale?.(lead)}>
-                    <Receipt className="mr-2 h-4 w-4" />
-                    সেল কনফার্ম করুন
+                {needsProject && canConvert ? (
+                  <DropdownMenuItem onSelect={() => onConvert?.(lead)}>
+                    <HardHat className="mr-2 h-4 w-4" />
+                    প্রজেক্ট তৈরি করুন
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuSeparator />
@@ -118,6 +122,11 @@ function CardBody({
                       {LEAD_STAGES.map((stage) => (
                         <DropdownMenuRadioItem key={stage} value={stage}>
                           {STAGE_LABEL[stage]}
+                          {isConditionalStage(stage) ? (
+                            <span className="ml-1.5 text-[10px] text-muted-foreground">
+                              ({CONDITIONAL_STAGE_HINT})
+                            </span>
+                          ) : null}
                         </DropdownMenuRadioItem>
                       ))}
                     </DropdownMenuRadioGroup>
@@ -146,6 +155,16 @@ function CardBody({
               {lead.residence.flag}
             </span>
             <span className="truncate">{lead.residence.label}</span>
+          </p>
+        ) : null}
+
+        {/* v2 — কী বানাতে হবে, কত জমিতে (PRD সেকশন ৫.১) */}
+        {lead.buildingTypeLabel || lead.landSize ? (
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Ruler className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {[lead.buildingTypeLabel, lead.landSize].filter(Boolean).join(' · ')}
+            </span>
           </p>
         ) : null}
 
@@ -187,6 +206,16 @@ function CardBody({
               {lead.documentCount}
             </span>
           ) : null}
+
+          {lead.checklistCount > 0 ? (
+            <span
+              className="flex items-center gap-0.5 text-[11px] font-medium text-muted-foreground"
+              title={`${lead.checklistCount} টি চেকলিস্ট আইটেম`}
+            >
+              <ListChecks className="h-3 w-3 shrink-0" />
+              {lead.checklistCount}
+            </span>
+          ) : null}
         </div>
 
         {lead.stage === 'LOST' && lead.lostReason ? (
@@ -195,31 +224,31 @@ function CardBody({
           </p>
         ) : null}
 
-        {/* কনভার্ট হওয়া লিড — কোন ইউনিট, কত টাকা, সেল কোন অবস্থায় */}
-        {lead.sale ? (
+        {/* কনভার্ট হওয়া লিড — কোন প্রজেক্ট, কত টাকার কন্ট্রাক্ট, কোন অবস্থায় */}
+        {lead.project ? (
           <div
             className="mt-2 rounded border bg-muted/40 px-1.5 py-1"
-            title={SALE_STATUS_HINT[lead.sale.status]}
+            title={PROJECT_STATUS_HINT[lead.project.status]}
           >
             <p className="flex items-center gap-1 text-[11px] font-medium">
               <BadgeCheck className="h-3 w-3 shrink-0 text-emerald-600" />
-              <span className="truncate">{lead.sale.unitLabel}</span>
+              <span className="truncate">{lead.project.title}</span>
             </p>
             <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span>{lead.sale.amountLabel}</span>
+              <span>{lead.project.amountLabel}</span>
               <span
                 className={cn(
                   'rounded px-1 py-px text-[10px] font-medium',
-                  SALE_STATUS_BADGE[lead.sale.status],
+                  PROJECT_STATUS_BADGE[lead.project.status],
                 )}
               >
-                {SALE_STATUS_LABEL[lead.sale.status]}
+                {PROJECT_STATUS_LABEL[lead.project.status]}
               </span>
             </p>
           </div>
-        ) : needsSale ? (
+        ) : needsProject ? (
           <p className="mt-2 rounded bg-amber-100 px-1.5 py-1 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-300">
-            সেল তৈরি হয়নি — ইউনিট নির্বাচন করে কনফার্ম করুন
+            প্রজেক্ট তৈরি হয়নি — কন্ট্রাক্ট ভ্যালু দিয়ে তৈরি করুন
           </p>
         ) : null}
       </div>
@@ -252,7 +281,7 @@ export function LeadCard({
   pending,
   onEdit,
   onChangeStage,
-  onConfirmSale,
+  onConvert,
 }: {
   lead: PipelineLead;
   canEdit: boolean;
@@ -260,7 +289,7 @@ export function LeadCard({
   pending: boolean;
   onEdit: (lead: PipelineLead) => void;
   onChangeStage: (lead: PipelineLead, stage: LeadStage) => void;
-  onConfirmSale: (lead: PipelineLead) => void;
+  onConvert: (lead: PipelineLead) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
@@ -280,7 +309,7 @@ export function LeadCard({
         pending={pending}
         onEdit={onEdit}
         onChangeStage={onChangeStage}
-        onConfirmSale={onConfirmSale}
+        onConvert={onConvert}
         dragHandle={
           canEdit ? (
             // পুরো কার্ড নয়, বাঁ পাশের স্ট্রিপটাই drag handle — এতে ভেতরের লিংক ও

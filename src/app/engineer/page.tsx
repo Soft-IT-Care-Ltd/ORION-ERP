@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { AlertTriangle, Building2, ChevronRight, HardHat, ListChecks } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
-import { phaseProgressSelect, projectScope, unitScope } from '@/lib/project-access';
+import { phaseProgressSelect, projectScope } from '@/lib/project-access';
 import { computePhaseStatus, summarizePhases } from '@/lib/phases';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/stat-card';
@@ -23,28 +23,19 @@ export default async function EngineerDashboard() {
       where: projectScope(user),
       select: {
         id: true,
-        name: true,
-        units: {
-          select: {
-            id: true,
-            unitNo: true,
-            phases: { select: phaseProgressSelect, orderBy: { order: 'asc' } },
-          },
-          orderBy: { unitNo: 'asc' },
-        },
+        title: true,
+        phases: { select: phaseProgressSelect, orderBy: { order: 'asc' } },
       },
     }),
     prisma.phaseUpdate.findMany({
-      where: { phase: { unit: unitScope(user) } },
+      where: { phase: { project: projectScope(user) } },
       select: {
         id: true,
         percentComplete: true,
         note: true,
         photoUrls: true,
         createdAt: true,
-        phase: {
-          select: { name: true, unit: { select: { unitNo: true, project: { select: { name: true } } } } },
-        },
+        phase: { select: { name: true, project: { select: { title: true } } } },
         updatedBy: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -52,32 +43,31 @@ export default async function EngineerDashboard() {
     }),
   ]);
 
-  const units = projects.flatMap((project) =>
-    project.units.map((unit) => ({
-      ...unit,
-      projectName: project.name,
-      summary: summarizePhases(unit.phases, now),
-    })),
-  );
+  const sites = projects.map((project) => ({
+    id: project.id,
+    title: project.title,
+    summary: summarizePhases(project.phases, now),
+  }));
 
-  // মনোযোগ দরকার এমন ইউনিট — পরিকল্পিত তারিখ পেরিয়ে যাওয়া ফেজ আছে যেগুলোতে
-  const attention = units
-    .filter((unit) => unit.summary.delayedCount > 0)
+  // মনোযোগ দরকার এমন সাইট — পরিকল্পিত তারিখ পেরিয়ে যাওয়া ফেজ আছে যেগুলোতে
+  const attention = sites
+    .filter((site) => site.summary.delayedCount > 0)
     .sort((a, b) => b.summary.delayedCount - a.summary.delayedCount);
 
-  const delayedPhaseCount = units.reduce((sum, unit) => sum + unit.summary.delayedCount, 0);
-  const doneUnits = units.filter((unit) => unit.summary.total > 0 && unit.summary.progress >= 100);
+  const delayedPhaseCount = sites.reduce((sum, site) => sum + site.summary.delayedCount, 0);
+  const doneSites = sites.filter((site) => site.summary.total > 0 && site.summary.progress >= 100);
+  const activePhases = sites.reduce((sum, site) => sum + site.summary.total, 0);
 
   const stats = [
-    { label: 'অ্যাসাইন করা প্রজেক্ট', value: projects.length, icon: Building2 },
-    { label: 'ইউনিট', value: units.length, icon: HardHat },
+    { label: 'অ্যাসাইন করা সাইট', value: projects.length, icon: Building2 },
+    { label: 'মোট ফেজ', value: activePhases, icon: HardHat },
     {
       label: 'বিলম্বিত ফেজ',
       value: delayedPhaseCount,
       icon: AlertTriangle,
       tone: 'text-destructive',
     },
-    { label: 'সম্পন্ন ইউনিট', value: doneUnits.length, icon: ListChecks },
+    { label: 'সম্পন্ন সাইট', value: doneSites.length, icon: ListChecks },
   ];
 
   return (
@@ -97,35 +87,33 @@ export default async function EngineerDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">মনোযোগ দরকার</CardTitle>
           <CardDescription>
-            পরিকল্পিত তারিখ পেরিয়ে গেছে কিন্তু এখনো সম্পন্ন হয়নি এমন ফেজ আছে যে ইউনিটগুলোতে
+            পরিকল্পিত তারিখ পেরিয়ে গেছে কিন্তু এখনো সম্পন্ন হয়নি এমন ফেজ আছে যে সাইটগুলোতে
           </CardDescription>
         </CardHeader>
         <CardContent>
           {attention.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              {units.length === 0
+              {sites.length === 0
                 ? 'আপনার নামে এখনো কোনো সাইট অ্যাসাইন করা হয়নি'
                 : 'কোনো ফেজ পিছিয়ে নেই — সব ঠিক আছে'}
             </p>
           ) : (
             <ul className="divide-y">
-              {attention.slice(0, 6).map((unit) => (
-                <li key={unit.id}>
+              {attention.slice(0, 6).map((site) => (
+                <li key={site.id}>
                   <Link
-                    href={`/engineer/sites/${unit.id}`}
+                    href={`/engineer/sites/${site.id}`}
                     className="-mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/60"
                   >
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <p className="truncate text-sm font-medium">
-                        {unit.projectName} — {unit.unitNo}
-                      </p>
-                      <PhaseProgressBar progress={unit.summary.progress} />
+                      <p className="truncate text-sm font-medium">{site.title}</p>
+                      <PhaseProgressBar progress={site.summary.progress} />
                       <p className="text-xs text-destructive">
-                        {unit.summary.delayedCount} টি ফেজ পিছিয়ে
-                        {unit.summary.current ? (
+                        {site.summary.delayedCount} টি ফেজ পিছিয়ে
+                        {site.summary.current ? (
                           <span className="text-muted-foreground">
                             {' '}
-                            · চলমান: {unit.summary.current.nameBn ?? unit.summary.current.name}
+                            · চলমান: {site.summary.current.nameBn ?? site.summary.current.name}
                           </span>
                         ) : null}
                       </p>
@@ -148,7 +136,7 @@ export default async function EngineerDashboard() {
           <PhaseUpdateLog
             updates={recentUpdates.map((update) => ({
               id: update.id,
-              phaseName: `${update.phase.unit.project.name} — ${update.phase.unit.unitNo} · ${update.phase.name}`,
+              phaseName: `${update.phase.project.title} · ${update.phase.name}`,
               percentComplete: update.percentComplete,
               note: update.note,
               photoUrls: update.photoUrls,

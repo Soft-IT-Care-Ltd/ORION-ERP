@@ -1,7 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { LeadActivityType, LeadFileType, LeadSource, LeadStage, Role } from '@prisma/client';
+import {
+  BuildingType,
+  LeadActivityType,
+  LeadFileType,
+  LeadSource,
+  LeadStage,
+  Role,
+} from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser, type AuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
@@ -24,6 +31,7 @@ import {
   updateLeadSchema,
   uploadDocumentSchema,
 } from '@/lib/validations/lead';
+import { logFollowUpSchema } from '@/lib/validations/follow-up';
 
 export type { ActionResult } from '@/lib/action-result';
 
@@ -31,6 +39,8 @@ export type { ActionResult } from '@/lib/action-result';
 function revalidateLead(leadId?: string) {
   revalidatePath('/sales/pipeline');
   revalidatePath('/sales');
+  revalidatePath('/sales/follow-up');
+  revalidatePath('/sales/performance');
   if (leadId) revalidatePath(`/sales/leads/${leadId}`);
 }
 
@@ -77,20 +87,8 @@ async function resolveAssignee(
   return { assignedToId: target.id };
 }
 
-/** unitId দেওয়া থাকলে সেটি সত্যিই আছে কিনা */
-async function validateUnit(unitId: string | undefined): Promise<ActionError | null> {
-  if (!unitId) return null;
-  const unit = await prisma.unit.findUnique({ where: { id: unitId }, select: { id: true } });
-  if (unit) return null;
-  return {
-    ok: false,
-    message: 'ইনপুট সঠিক নয়',
-    fieldErrors: { unitId: 'ইউনিটটি খুঁজে পাওয়া যায়নি' },
-  };
-}
-
 /**
- * FormData.get() অনুপস্থিত ফিল্ডে `null` দেয় — যেমন disabled `<select>` (ইউনিট নেই)
+ * FormData.get() অনুপস্থিত ফিল্ডে `null` দেয় — যেমন ফাঁকা `<select>`
  * বা যে ফিল্ড ওই role এ রেন্ডারই হয়নি (assignedToId)। zod এর optional স্কিমা
  * `undefined` বোঝে, `null` নয় — তাই এখানেই নরমালাইজ করা হয়।
  */
@@ -108,8 +106,9 @@ function leadFormValues(formData: FormData) {
     residenceCountry: field(formData, 'residenceCountry'),
     email: field(formData, 'email'),
     source: field(formData, 'source'),
-    unitId: field(formData, 'unitId'),
     projectLocation: field(formData, 'projectLocation'),
+    landSize: field(formData, 'landSize'),
+    buildingType: field(formData, 'buildingType'),
     budgetMin: field(formData, 'budgetMin'),
     budgetMax: field(formData, 'budgetMax'),
     assignedToId: field(formData, 'assignedToId'),
@@ -127,9 +126,10 @@ function leadWriteData(
     phone: string;
     email?: string;
     source: string;
-    unitId?: string;
     residenceCountry?: string;
     projectLocation?: string;
+    landSize?: string;
+    buildingType?: string;
     budgetMin?: number;
     budgetMax?: number;
     nextFollowUpAt?: string;
@@ -144,9 +144,10 @@ function leadWriteData(
     phone: input.phone,
     email: input.email || null,
     source: input.source as LeadSource,
-    unitId: input.unitId ?? null,
     residenceCountry: input.residenceCountry ?? null,
     projectLocation: input.projectLocation ?? null,
+    landSize: input.landSize ?? null,
+    buildingType: (input.buildingType as BuildingType | undefined) ?? null,
     budgetMin: input.budgetMin ?? null,
     budgetMax: input.budgetMax ?? null,
     assignedToId,
@@ -169,9 +170,6 @@ export async function createLead(formData: FormData): Promise<ActionResult<{ id:
   }
   const input = parsed.data;
 
-  const unitError = await validateUnit(input.unitId);
-  if (unitError) return unitError;
-
   const assignee = await resolveAssignee(actor, input.assignedToId);
   if (assignee.error) return assignee.error;
   const { assignedToId } = assignee;
@@ -189,8 +187,8 @@ export async function createLead(formData: FormData): Promise<ActionResult<{ id:
           leadId: created.id,
           type: LeadActivityType.CREATED,
           note: residence
-            ? `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.NEW}) · অবস্থান: ${residence}`
-            : `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.NEW})`,
+            ? `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.INQUIRY}) · অবস্থান: ${residence}`
+            : `লিড তৈরি করা হয়েছে (স্টেজ: ${STAGE_LABEL.INQUIRY})`,
           createdById: actor.id,
         },
       });
@@ -256,9 +254,6 @@ export async function updateLead(formData: FormData): Promise<ActionResult> {
     },
   });
   if (!existing) return NOT_FOUND;
-
-  const unitError = await validateUnit(input.unitId);
-  if (unitError) return unitError;
 
   const assignee = await resolveAssignee(actor, input.assignedToId);
   if (assignee.error) return assignee.error;
@@ -361,7 +356,7 @@ export async function changeLeadStage(input: {
       name: true,
       stage: true,
       assignedToId: true,
-      sale: { select: { id: true } },
+      project: { select: { id: true } },
     },
   });
   if (!existing) return NOT_FOUND;
@@ -370,22 +365,23 @@ export async function changeLeadStage(input: {
     return { ok: true, message: 'স্টেজ অপরিবর্তিত' };
   }
 
-  // PRD সেকশন ৫.১ — Won এ যাওয়া মানে ইউনিট সহ সেল তৈরি হওয়া। UI ডায়ালগ খুলে
-  // `convertLeadToSale` ডাকে; সরাসরি এখানে এলে স্টেজ বদলে সেল বাদ পড়ে যেত।
-  if (stage === LeadStage.WON && !existing.sale) {
+  // PRD সেকশন ৫.৩ — Won এ যাওয়া মানে কনস্ট্রাকশন Project তৈরি হওয়া। UI ডায়ালগ
+  // খুলে `convertLeadToProject` ডাকে; সরাসরি এখানে এলে স্টেজ বদলে প্রজেক্ট বাদ
+  // পড়ে যেত।
+  if (stage === LeadStage.WON && !existing.project) {
     return {
       ok: false,
-      message: 'Won এ নিতে হলে ইউনিট নির্বাচন করে সেল কনফার্ম করুন',
-      fieldErrors: { stage: 'সেল কনফার্ম করা প্রয়োজন' },
+      message: 'Won এ নিতে হলে কন্ট্রাক্ট ভ্যালু দিয়ে প্রজেক্ট তৈরি করুন',
+      fieldErrors: { stage: 'প্রজেক্ট তৈরি করা প্রয়োজন' },
     };
   }
 
-  // সেল তৈরি হয়ে গেলে লিড আর পাইপলাইনে ফেরত যাবে না — ইউনিট SOLD, কাস্টমার তৈরি।
-  // ফেরাতে হলে আগে সেলটি বাতিল করতে হবে (Phase 4 — Accounts/Admin)।
-  if (existing.stage === LeadStage.WON && existing.sale && stage !== LeadStage.WON) {
+  // প্রজেক্ট তৈরি হয়ে গেলে লিড আর পাইপলাইনে ফেরত যাবে না — কাস্টমার অ্যাকাউন্ট,
+  // ফেজ টাইমলাইন ও পেমেন্ট প্ল্যান সব ওই প্রজেক্টের সাথে বাঁধা।
+  if (existing.stage === LeadStage.WON && existing.project && stage !== LeadStage.WON) {
     return {
       ok: false,
-      message: 'সেল তৈরি হয়ে গেছে — স্টেজ ফেরাতে হলে আগে সেলটি বাতিল করতে হবে',
+      message: 'প্রজেক্ট তৈরি হয়ে গেছে — স্টেজ ফেরানো যাবে না',
     };
   }
 
@@ -464,6 +460,81 @@ export async function addLeadNote(input: { id: string; note: string }): Promise<
 
   revalidateLead(id);
   return { ok: true, message: 'নোট যোগ হয়েছে' };
+}
+
+// ---------------------------------------------------------------- follow-up
+
+/**
+ * ফলো-আপ লগ — PRD সেকশন ৫.১ (Automation rules)।
+ *
+ * এক সাবমিশনে দুটো কাজ: নোটটি টাইমলাইনে যায়, আর পরের ফলো-আপ তারিখ বসে। দুটো
+ * আলাদা অ্যাকশনে ভাগ করলে এক্সিকিউটিভকে দুবার ফর্ম ভরতে হতো, আর একটা সফল হয়ে
+ * অন্যটা ব্যর্থ হলে ডেটা অসঙ্গত থাকত — তাই এক ট্রানজেকশনে।
+ */
+export async function logFollowUp(input: {
+  leadId: string;
+  note: string;
+  nextFollowUpAt?: string;
+}): Promise<ActionResult> {
+  const actor = await getAuthorizedUser('lead:edit');
+  if (!actor) return FORBIDDEN;
+
+  const parsed = logFollowUpSchema.safeParse(input);
+  if (!parsed.success) {
+    const fieldErrors = zodErrors(parsed.error);
+    return { ok: false, message: fieldErrors.note ?? 'ইনপুট সঠিক নয়', fieldErrors };
+  }
+  const { leadId, note } = parsed.data;
+
+  // scope সহ — অন্যের লিডে ফলো-আপ লেখা যাবে না
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, ...leadScope(actor) },
+    select: { id: true, name: true, nextFollowUpAt: true },
+  });
+  if (!lead) return NOT_FOUND;
+
+  const nextFollowUpAt = parseFollowUpDate(parsed.data.nextFollowUpAt);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.leadActivity.create({
+        data: { leadId, type: LeadActivityType.NOTE, note, createdById: actor.id },
+      });
+
+      if (!sameDay(lead.nextFollowUpAt, nextFollowUpAt)) {
+        await tx.lead.update({ where: { id: leadId }, data: { nextFollowUpAt } });
+        await tx.leadActivity.create({
+          data: {
+            leadId,
+            type: LeadActivityType.FOLLOW_UP_SET,
+            note: nextFollowUpAt
+              ? `পরবর্তী ফলো-আপ: ${parsed.data.nextFollowUpAt}`
+              : 'ফলো-আপ তারিখ সরানো হয়েছে',
+            createdById: actor.id,
+          },
+        });
+      }
+    });
+
+    await logActivity({
+      entityType: 'Lead',
+      entityId: leadId,
+      userId: actor.id,
+      action: 'FOLLOW_UP_LOGGED',
+      metadata: { nextFollowUpAt: parsed.data.nextFollowUpAt ?? null },
+    });
+
+    revalidateLead(leadId);
+    return {
+      ok: true,
+      message: nextFollowUpAt
+        ? `${lead.name} — ফলো-আপ লগ হয়েছে, পরবর্তী ${parsed.data.nextFollowUpAt}`
+        : `${lead.name} — ফলো-আপ লগ হয়েছে`,
+    };
+  } catch (error) {
+    console.error('logFollowUp failed', error);
+    return { ok: false, message: 'ফলো-আপ লগ করা যায়নি' };
+  }
 }
 
 // ---------------------------------------------------------------- documents

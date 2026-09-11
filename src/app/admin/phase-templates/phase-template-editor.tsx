@@ -10,24 +10,19 @@ import { Label } from '@/components/ui/label';
 import { DEFAULT_PHASE_TEMPLATE, PHASE_NAME_BN } from '@/lib/phases';
 import { validate } from '@/lib/validations/form';
 import { savePhaseTemplateSchema } from '@/lib/validations/project';
-import { savePhaseTemplate } from '../actions';
+import { savePhaseTemplate } from '../projects/actions';
 
 export type TemplateRow = { name: string; defaultDurationDays: string };
 
 /**
- * PRD সেকশন ৫.২ — প্রজেক্টের ফেজ টেমপ্লেট (customizable)।
+ * PRD সেকশন ৫.৪ — কনস্ট্রাকশন ফেজের গ্লোবাল টেমপ্লেট (customizable)।
  *
- * টেমপ্লেট একটি *ব্লুপ্রিন্ট*: নতুন ইউনিট তৈরির সময় (বা "টেমপ্লেট প্রয়োগ" চাপলে)
- * এখান থেকে ইউনিটের নিজের Phase গুলো তৈরি হয়। আগে তৈরি হওয়া ইউনিটের টাইমলাইন
- * এতে বদলায় না — সেখানে ইঞ্জিনিয়ারের অগ্রগতি ও ছবি জমে আছে।
+ * v2 তে টেমপ্লেট আর কোনো প্রজেক্টের সাথে বাঁধা নয় — একটিই তালিকা, যেটি থেকে
+ * Lead → Won কনভার্শনের সময় (বা "টেমপ্লেট প্রয়োগ" চাপলে) প্রতিটি প্রজেক্টের
+ * নিজের Phase গুলো কপি হয়। আগে তৈরি হওয়া প্রজেক্টের টাইমলাইন এতে বদলায় না —
+ * সেখানে ইঞ্জিনিয়ারের অগ্রগতি ও ছবি জমে আছে।
  */
-export function PhaseTemplateEditor({
-  projectId,
-  initial,
-}: {
-  projectId: string;
-  initial: TemplateRow[];
-}) {
+export function PhaseTemplateEditor({ initial }: { initial: TemplateRow[] }) {
   const router = useRouter();
   const [rows, setRows] = useState<TemplateRow[]>(
     initial.length > 0 ? initial : defaultRows(),
@@ -51,7 +46,7 @@ export function PhaseTemplateEditor({
   }
 
   async function onSave() {
-    const check = validate(savePhaseTemplateSchema, { projectId, phases: rows });
+    const check = validate(savePhaseTemplateSchema, { phases: rows });
     if (!check.ok) {
       const message = Object.values(check.fieldErrors)[0] ?? check.message;
       setError(message);
@@ -60,7 +55,7 @@ export function PhaseTemplateEditor({
     }
 
     setPending(true);
-    const result = await savePhaseTemplate({ projectId, phases: rows });
+    const result = await savePhaseTemplate({ phases: rows });
     setPending(false);
 
     if (result.ok) {

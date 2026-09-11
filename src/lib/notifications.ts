@@ -33,7 +33,7 @@ export type NotificationType =
   | 'PHASE_MILESTONE'
   | 'DOCUMENT_UPLOADED'
   | 'LEAD_ASSIGNED'
-  | 'SALE_DRAFT_CREATED';
+  | 'PROJECT_CREATED';
 
 /** বেল ড্রপডাউনে একবারে সর্বোচ্চ কতগুলো দেখানো হবে */
 export const NOTIFICATION_FEED_LIMIT = 15;
@@ -63,7 +63,7 @@ export async function notify(params: NotifyInput) {
 }
 
 /**
- * একই মেসেজ একাধিক ইউজারকে (যেমন সব Accounts + Admin কে ড্রাফট সেলের খবর)।
+ * একই মেসেজ একাধিক ইউজারকে (যেমন সব Accounts + Admin কে নতুন প্রজেক্টের খবর)।
  * খালি তালিকায় কিছুই লেখে না।
  */
 export async function notifyMany(params: {
@@ -247,7 +247,7 @@ export async function notifyDueFollowUps(now = new Date()) {
 
 /* ------------------------------------------------ installment reminders */
 
-/** কিস্তি + সেল/কাস্টমার/ইউনিটের পরিচিতি — দুই রিমাইন্ডারেই একই select */
+/** কিস্তি + প্রজেক্ট/কাস্টমারের পরিচিতি — দুই রিমাইন্ডারেই একই select */
 const dueInstallmentSelect = {
   id: true,
   label: true,
@@ -256,11 +256,11 @@ const dueInstallmentSelect = {
   payments: { select: { amountReceived: true } },
   paymentPlan: {
     select: {
-      sale: {
+      project: {
         select: {
           id: true,
+          title: true,
           customer: { select: { userId: true, user: { select: { name: true, active: true } } } },
-          unit: { select: { unitNo: true, project: { select: { name: true } } } },
         },
       },
     },
@@ -276,7 +276,7 @@ function remainingOf(row: DueInstallment) {
 }
 
 /**
- * PRD সেকশন ৫.৩ — due date এর ৭ দিন আগে রিমাইন্ডার (customer + accounts কে)।
+ * PRD সেকশন ৫.৫ — due date এর ৭ দিন আগে রিমাইন্ডার (customer + accounts কে)।
  *
  * আজ থেকে আগামী ৭ দিনের মধ্যে যেসব কিস্তির তারিখ, সেগুলোই। প্রতিটি কিস্তির
  * জন্য মাত্র একবার — key তে installment id, তাই sweep রোজ চললেও পুনরাবৃত্তি নেই।
@@ -298,14 +298,13 @@ export async function notifyUpcomingInstallments(now = new Date()) {
     // পুরো টাকা আগেই জমা পড়ে গেছে (status এখনো সিঙ্ক হয়নি) — মনে করানোর কিছু নেই
     if (remaining <= 0) continue;
 
-    const sale = row.paymentPlan.sale;
+    const project = row.paymentPlan.project;
     const key = KEY.installmentDueSoon(row.id);
     const dateLabel = format(row.dueDate, 'dd MMM yyyy');
-    const unitLabel = `${sale.unit.project.name} — ${sale.unit.unitNo}`;
 
-    if (sale.customer.user.active) {
+    if (project.customer.user.active) {
       data.push({
-        userId: sale.customer.userId,
+        userId: project.customer.userId,
         type: 'PAYMENT_DUE',
         message: `আসন্ন কিস্তি — ${row.label}, ${formatBDT(remaining)} · শেষ তারিখ ${dateLabel}`,
         link: '/customer/payments',
@@ -317,8 +316,8 @@ export async function notifyUpcomingInstallments(now = new Date()) {
       data.push({
         userId,
         type: 'PAYMENT_DUE',
-        message: `${sale.customer.user.name} (${unitLabel}) — ${row.label} ${formatBDT(remaining)} · ${dateLabel} এ due`,
-        link: `/accounts/schedule/${sale.id}`,
+        message: `${project.customer.user.name} (${project.title}) — ${row.label} ${formatBDT(remaining)} · ${dateLabel} এ due`,
+        link: `/accounts/schedule/${project.id}`,
         key,
       });
     }
@@ -329,7 +328,7 @@ export async function notifyUpcomingInstallments(now = new Date()) {
 }
 
 /**
- * PRD সেকশন ৫.৩ — কিস্তি overdue হলে (customer + accounts কে)।
+ * PRD সেকশন ৫.৫ — কিস্তি overdue হলে (customer + accounts কে)।
  *
  * key তে aging বালতি থাকায় প্রতিটি কিস্তিতে সর্বোচ্চ তিনটি রিমাইন্ডার যায় —
  * বকেয়া হওয়ার পর, ১৫ দিন পেরোলে, আর ৩০ দিন পেরোলে। রোজকার পুনরাবৃত্তি নেই,
@@ -351,17 +350,16 @@ export async function notifyOverdueInstallments(now = new Date()) {
     const remaining = remainingOf(row);
     if (remaining <= 0) continue;
 
-    const sale = row.paymentPlan.sale;
+    const project = row.paymentPlan.project;
     const days = Math.max(
       1,
       Math.round((startOfDay(now).getTime() - startOfDay(row.dueDate).getTime()) / 86_400_000),
     );
     const key = KEY.installmentOverdue(row.id, agingBucket(days));
-    const unitLabel = `${sale.unit.project.name} — ${sale.unit.unitNo}`;
 
-    if (sale.customer.user.active) {
+    if (project.customer.user.active) {
       data.push({
-        userId: sale.customer.userId,
+        userId: project.customer.userId,
         type: 'PAYMENT_OVERDUE',
         message: `কিস্তি বকেয়া — ${row.label}, ${formatBDT(remaining)} · ${days} দিন পেরিয়েছে`,
         link: '/customer/payments',
@@ -373,7 +371,7 @@ export async function notifyOverdueInstallments(now = new Date()) {
       data.push({
         userId,
         type: 'PAYMENT_OVERDUE',
-        message: `বকেয়া ${days} দিন — ${sale.customer.user.name} (${unitLabel}) ${row.label} ${formatBDT(remaining)}`,
+        message: `বকেয়া ${days} দিন — ${project.customer.user.name} (${project.title}) ${row.label} ${formatBDT(remaining)}`,
         link: '/accounts/overdue',
         key,
       });
@@ -390,7 +388,7 @@ export async function notifyOverdueInstallments(now = new Date()) {
 const PHASE_DONE_LOOKBACK_DAYS = 30;
 
 /**
- * PRD সেকশন ৫.২/৫.৬ — ফেজ "DONE" হলে কাস্টমারকে জানানো।
+ * PRD সেকশন ৫.৪/৫.৯ — ফেজ "DONE" হলে কাস্টমারকে জানানো।
  *
  * `Phase.status` একটি স্ন্যাপশট (`lib/phases.ts` দ্রষ্টব্য), তাই শর্তটি
  * `percentComplete >= 100` — `computePhaseStatus` ঠিক এই নিয়মেই DONE বলে।
@@ -408,31 +406,27 @@ export async function notifyDonePhases(params: { phaseId?: string; now?: Date } 
         ? { id: params.phaseId }
         : { actualEnd: { gte: subDays(startOfDay(now), PHASE_DONE_LOOKBACK_DAYS) } }),
       percentComplete: { gte: 100 },
-      unit: { sale: { isNot: null } },
     },
     select: {
       id: true,
       name: true,
-      unit: {
+      project: {
         select: {
-          unitNo: true,
-          project: { select: { name: true } },
-          sale: {
-            select: { customer: { select: { userId: true, user: { select: { active: true } } } } },
-          },
+          title: true,
+          customer: { select: { userId: true, user: { select: { active: true } } } },
         },
       },
     },
   });
 
   const data = phases.flatMap((phase) => {
-    const customer = phase.unit.sale?.customer;
-    if (!customer || !customer.user.active) return [];
+    const customer = phase.project.customer;
+    if (!customer.user.active) return [];
     return [
       {
         userId: customer.userId,
         type: 'PHASE_MILESTONE' satisfies NotificationType,
-        message: `"${phase.name}" ফেজ সম্পন্ন হয়েছে — ${phase.unit.project.name} · ${phase.unit.unitNo}`,
+        message: `"${phase.name}" ফেজ সম্পন্ন হয়েছে — ${phase.project.title}`,
         link: '/customer/progress',
         key: KEY.phaseDone(phase.id),
       },

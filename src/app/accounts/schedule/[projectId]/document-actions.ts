@@ -7,7 +7,7 @@ import { logActivity } from '@/lib/activity-log';
 import { notify } from '@/lib/notifications';
 import { saveUploadedFile } from '@/lib/upload';
 import { DOCUMENT_TYPE_LABEL, type DocumentType } from '@/lib/documents';
-import { uploadSaleDocumentSchema } from '@/lib/validations/document';
+import { uploadProjectDocumentSchema } from '@/lib/validations/document';
 import {
   type ActionResult,
   FORBIDDEN,
@@ -26,21 +26,22 @@ function field(formData: FormData, key: string) {
 }
 
 /**
- * PRD সেকশন ৫.৪ ও ৫.৫ — সেলের কাগজপত্র (বুকিং ফর্ম, সেল এগ্রিমেন্ট, অ্যালটমেন্ট
- * লেটার, দলিল) আপলোড। ফাইলগুলো কাস্টমার পোর্টালে সঙ্গে সঙ্গে দেখা যায়।
+ * PRD সেকশন ৫.৭ ও ৫.৮ — প্রজেক্টের কাগজপত্র (কনস্ট্রাকশন চুক্তি, সরকারি অনুমোদন
+ * কপি, ডিজাইন ড্রয়িং, রসিদ, হ্যান্ডওভার সার্টিফিকেট) আপলোড। ফাইলগুলো কাস্টমার
+ * পোর্টালে সঙ্গে সঙ্গে দেখা যায়।
  *
- * অনুমতি `document:manageSale` — PRD সেকশন ৪ অনুযায়ী শুধু Admin ও Accounts।
+ * অনুমতি `document:manageProject` — PRD সেকশন ৪ অনুযায়ী শুধু Admin ও Accounts।
  * লিড ডকুমেন্টের `document:upload` দিয়ে যাচাই করা হয়নি, কারণ সেটি
  * MARKETING/ENGINEER এরও আছে (তাদের নিজেদের মডিউলের ফাইলের জন্য)।
  */
-export async function uploadSaleDocuments(
+export async function uploadProjectDocuments(
   formData: FormData,
 ): Promise<ActionResult<{ uploaded: number }>> {
-  const actor = await getAuthorizedUser('document:manageSale');
+  const actor = await getAuthorizedUser('document:manageProject');
   if (!actor) return FORBIDDEN;
 
-  const parsed = uploadSaleDocumentSchema.safeParse({
-    saleId: field(formData, 'saleId'),
+  const parsed = uploadProjectDocumentSchema.safeParse({
+    projectId: field(formData, 'projectId'),
     type: field(formData, 'type'),
     description: field(formData, 'description'),
   });
@@ -48,18 +49,14 @@ export async function uploadSaleDocuments(
     const fieldErrors = zodErrors(parsed.error);
     return { ok: false, message: fieldErrors.type ?? 'ইনপুট সঠিক নয়', fieldErrors };
   }
-  const { saleId, description } = parsed.data;
+  const { projectId, description } = parsed.data;
   const type: DocumentType = parsed.data.type;
 
-  const sale = await prisma.sale.findUnique({
-    where: { id: saleId },
-    select: {
-      id: true,
-      customer: { select: { userId: true } },
-      unit: { select: { unitNo: true, project: { select: { name: true } } } },
-    },
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, title: true, customer: { select: { userId: true } } },
   });
-  if (!sale) return NOT_FOUND;
+  if (!project) return NOT_FOUND;
 
   const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
   // multipart filename হেডার latin-1 এ ডিকোড হয় (বাংলা নাম নষ্ট হয়ে যায়),
@@ -76,7 +73,7 @@ export async function uploadSaleDocuments(
 
   for (const [index, file] of files.entries()) {
     const originalName = clientNames[index] || file.name;
-    const result = await saveUploadedFile(file, ['sales', saleId], originalName);
+    const result = await saveUploadedFile(file, ['projects', projectId], originalName);
     if (result.ok) saved.push({ fileUrl: result.file.url, fileName: result.file.fileName });
     else failed.push(`${originalName} — ${result.reason}`);
   }
@@ -88,7 +85,7 @@ export async function uploadSaleDocuments(
 
   await prisma.document.createMany({
     data: saved.map((f) => ({
-      saleId,
+      projectId,
       type,
       fileUrl: f.fileUrl,
       fileName: f.fileName,
@@ -99,22 +96,23 @@ export async function uploadSaleDocuments(
 
   // CLAUDE.md নিয়ম ৪ — critical action এর audit trail
   await logActivity({
-    entityType: 'Sale',
-    entityId: saleId,
+    entityType: 'Project',
+    entityId: projectId,
     userId: actor.id,
     action: 'DOCUMENT_UPLOADED',
     metadata: { type, count: saved.length, fileNames: saved.map((f) => f.fileName) },
   });
 
-  // PRD সেকশন ৫.৬ — "document uploaded" ইভেন্টে কাস্টমারকে জানানো
+  // PRD সেকশন ৫.৯ — "document uploaded" ইভেন্টে কাস্টমারকে জানানো
   await notify({
-    userId: sale.customer.userId,
+    userId: project.customer.userId,
     type: 'DOCUMENT_UPLOADED',
-    message: `${sale.unit.project.name} — ${sale.unit.unitNo}: ${saved.length} টি নতুন ডকুমেন্ট যোগ হয়েছে (${DOCUMENT_TYPE_LABEL[type]})`,
+    message: `${project.title}: ${saved.length} টি নতুন ডকুমেন্ট যোগ হয়েছে (${DOCUMENT_TYPE_LABEL[type]})`,
     link: '/customer/documents',
   });
 
-  revalidatePath(`/accounts/schedule/${saleId}`);
+  revalidatePath(`/accounts/schedule/${projectId}`);
+  revalidatePath(`/admin/projects/${projectId}`);
   // কাস্টমার পোর্টালের যে পাতাগুলোতে ফাইলটি দেখা যাবে
   revalidatePath('/customer');
   revalidatePath('/customer/documents');

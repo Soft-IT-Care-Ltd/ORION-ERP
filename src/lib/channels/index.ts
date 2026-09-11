@@ -40,7 +40,7 @@ export const CHANNEL_POLICY: Record<NotificationType, NotificationChannel[]> = {
   PHASE_MILESTONE: [NotificationChannel.EMAIL],
   DOCUMENT_UPLOADED: [NotificationChannel.EMAIL],
   LEAD_ASSIGNED: [NotificationChannel.EMAIL],
-  SALE_DRAFT_CREATED: [NotificationChannel.EMAIL],
+  PROJECT_CREATED: [NotificationChannel.EMAIL],
 };
 
 /** ইমেইলের সাবজেক্ট — টাইপভেদে, যাতে ইনবক্সেই বোঝা যায় */
@@ -51,7 +51,7 @@ const SUBJECT: Record<NotificationType, string> = {
   PHASE_MILESTONE: 'নির্মাণ অগ্রগতির আপডেট',
   DOCUMENT_UPLOADED: 'নতুন ডকুমেন্ট',
   LEAD_ASSIGNED: 'নতুন লিড অ্যাসাইন',
-  SALE_DRAFT_CREATED: 'নতুন সেল — পেমেন্ট প্ল্যান বাকি',
+  PROJECT_CREATED: 'নতুন প্রজেক্ট — পেমেন্ট প্ল্যান বাকি',
 };
 
 /** একটি ডেলিভারি এতবার ব্যর্থ হলে আর চেষ্টা করা হয় না */

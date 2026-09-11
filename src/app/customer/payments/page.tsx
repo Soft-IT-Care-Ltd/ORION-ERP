@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { CreditCard, Info } from 'lucide-react';
 import { auth } from '@/lib/auth';
-import { loadCustomerUnits } from '@/lib/customer-data';
-import { loadSalePlan, markOverdueInstallments } from '@/lib/payment-data';
+import { loadCustomerProjects } from '@/lib/customer-data';
+import { loadProjectPlan, markOverdueInstallments } from '@/lib/payment-data';
 import { paymentHistory } from '@/lib/payments';
 import { formatBDT } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,14 +10,16 @@ import { PaymentHistory, PaymentScheduleTable, PaymentSummary } from '@/componen
 
 export const metadata = { title: 'পেমেন্ট' };
 
+export const dynamic = 'force-dynamic';
+
 /**
- * PRD সেকশন ৫.৪ — কাস্টমার নিজের payment schedule ও payment history দেখেন,
+ * PRD সেকশন ৫.৭ — কাস্টমার নিজের payment schedule ও payment history দেখেন,
  * সঙ্গে প্রতিটি পেমেন্টের ডাউনলোডযোগ্য রসিদ।
  *
  * `customer/progress/page.tsx` এর মতোই এখানে `PaymentScheduleTable` কে `actions`
  * ছাড়া ব্যবহার করা হয়েছে, তাই এটি সম্পূর্ণ read-only — কাস্টমার কিছু বদলাতে
- * পারেন না (PRD সেকশন ৪)। ইউনিটের তালিকা ড্যাশবোর্ডের মতোই `lib/customer-data.ts`
- * থেকে আসে, যাতে স্কোপ (নিজের সেল) এক জায়গাতেই ঠিক হয়।
+ * পারেন না (PRD সেকশন ৪)। প্রজেক্টের তালিকা ড্যাশবোর্ডের মতোই
+ * `lib/customer-data.ts` থেকে আসে, যাতে স্কোপ (নিজের প্রজেক্ট) এক জায়গাতেই ঠিক হয়।
  */
 export default async function CustomerPaymentsPage() {
   const session = await auth();
@@ -26,9 +28,12 @@ export default async function CustomerPaymentsPage() {
   const now = new Date();
   await markOverdueInstallments(now);
 
-  const units = await loadCustomerUnits(session.user.id);
+  const projects = await loadCustomerProjects(session.user.id);
   const plans = await Promise.all(
-    units.map(async (unit) => ({ unit, plan: await loadSalePlan(unit.saleId, now) })),
+    projects.map(async (project) => ({
+      project,
+      plan: await loadProjectPlan(project.projectId, now),
+    })),
   );
 
   return (
@@ -44,19 +49,25 @@ export default async function CustomerPaymentsPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <CreditCard className="h-8 w-8 text-muted-foreground" />
-            <p className="font-medium">এখনো কোনো ইউনিট যুক্ত হয়নি</p>
+            <p className="font-medium">এখনো কোনো প্রজেক্ট যুক্ত হয়নি</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              বুকিং সম্পন্ন হলে আপনার পেমেন্ট শিডিউল এখানে দেখা যাবে।
+              কন্ট্রাক্ট সাইন হলে আপনার পেমেন্ট শিডিউল এখানে দেখা যাবে।
             </p>
           </CardContent>
         </Card>
       ) : (
-        plans.map(({ unit, plan }) => (
-          <div key={unit.saleId} className="space-y-3">
+        plans.map(({ project, plan }) => (
+          <div key={project.projectId} className="space-y-3">
             <PaymentSummary
               summary={plan.summary}
-              title={unit.label}
-              subtitle={`${unit.projectLocation} · বুকিং ${unit.bookingDateLabel} · ${formatBDT(unit.totalAmount)}`}
+              title={project.title}
+              subtitle={[
+                project.landLocation,
+                project.startDateLabel ? `শুরু ${project.startDateLabel}` : null,
+                formatBDT(project.totalContractValue),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             />
 
             <Card>

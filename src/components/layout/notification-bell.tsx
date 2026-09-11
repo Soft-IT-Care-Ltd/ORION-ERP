@@ -48,7 +48,7 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   PHASE_MILESTONE: HardHat,
   DOCUMENT_UPLOADED: FileText,
   LEAD_ASSIGNED: UserPlus,
-  SALE_DRAFT_CREATED: FileText,
+  PROJECT_CREATED: HardHat,
 };
 
 /** জরুরি খবরগুলো রঙে আলাদা — বকেয়া লাল, ফলো-আপ অ্যাম্বার */
@@ -59,7 +59,7 @@ const TYPE_TONE: Record<NotificationType, string> = {
   PHASE_MILESTONE: 'text-emerald-600 dark:text-emerald-500',
   DOCUMENT_UPLOADED: 'text-muted-foreground',
   LEAD_ASSIGNED: 'text-violet-600 dark:text-violet-400',
-  SALE_DRAFT_CREATED: 'text-muted-foreground',
+  PROJECT_CREATED: 'text-muted-foreground',
 };
 
 export function NotificationBell({ initial }: { initial: NotificationFeed }) {

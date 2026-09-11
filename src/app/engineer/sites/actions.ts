@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
 import { notifyDonePhases, notifyMany } from '@/lib/notifications';
-import { unitScope } from '@/lib/project-access';
+import { projectScope } from '@/lib/project-access';
 import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action-result';
 import { computePhaseStatus } from '@/lib/phases';
 import { saveUploadedFile } from '@/lib/upload';
@@ -25,7 +25,7 @@ function field(formData: FormData, name: string) {
 }
 
 /**
- * PRD সেকশন ৫.২ — সাইট ইঞ্জিনিয়ারের ফেজ আপডেট।
+ * PRD সেকশন ৫.৪ — সাইট ইঞ্জিনিয়ারের ফেজ আপডেট।
  *
  * এক সাবমিটে: PhaseUpdate রেকর্ড (% + মন্তব্য + ছবি) তৈরি হয় এবং Phase এর
  * percentComplete / status / actual date গুলো সেই অনুযায়ী বসে।
@@ -57,20 +57,15 @@ export async function submitPhaseUpdate(
 
   // scope সহ — অন্য সাইটের ফেজ id গেস করেও আপডেট করা যাবে না (PRD সেকশন ৪)
   const phase = await prisma.phase.findFirst({
-    where: { id: phaseId, unit: unitScope(actor) },
+    where: { id: phaseId, project: projectScope(actor) },
     select: {
       id: true,
       name: true,
       percentComplete: true,
       plannedEnd: true,
       actualStart: true,
-      unit: {
-        select: {
-          id: true,
-          unitNo: true,
-          project: { select: { id: true, name: true } },
-          sale: { select: { customer: { select: { userId: true } } } },
-        },
+      project: {
+        select: { id: true, title: true, customer: { select: { userId: true } } },
       },
     },
   });
@@ -151,8 +146,7 @@ export async function submitPhaseUpdate(
     userId: actor.id,
     action: 'PHASE_UPDATED',
     metadata: {
-      unitId: phase.unit.id,
-      projectId: phase.unit.project.id,
+      projectId: phase.project.id,
       phaseName: phase.name,
       from: phase.percentComplete,
       to: percentComplete,
@@ -161,9 +155,9 @@ export async function submitPhaseUpdate(
     },
   });
 
-  // ফেজ সম্পন্ন হলো — অ্যাডমিন ও (থাকলে) কাস্টমারকে জানানো (PRD সেকশন ৫.৬)
+  // ফেজ সম্পন্ন হলো — অ্যাডমিন ও কাস্টমারকে জানানো (PRD সেকশন ৫.৯)
   if (isComplete && !wasComplete) {
-    const label = `${phase.unit.project.name} — ${phase.unit.unitNo}: "${phase.name}" ফেজ সম্পন্ন`;
+    const label = `${phase.project.title}: "${phase.name}" ফেজ সম্পন্ন`;
 
     const admins = await prisma.user.findMany({
       where: { active: true, role: Role.ADMIN, id: { not: actor.id } },
@@ -173,7 +167,7 @@ export async function submitPhaseUpdate(
       userIds: admins.map((a) => a.id),
       type: 'PHASE_MILESTONE',
       message: label,
-      link: `/admin/projects/${phase.unit.project.id}/units/${phase.unit.id}`,
+      link: `/admin/projects/${phase.project.id}`,
     });
 
     // কাস্টমারের খবরটি sweep ও এখান থেকে — দুই পথেই একই key, তাই দুবার যায় না
@@ -182,10 +176,10 @@ export async function submitPhaseUpdate(
 
   revalidatePath('/engineer');
   revalidatePath('/engineer/sites');
-  revalidatePath(`/engineer/sites/${phase.unit.id}`);
-  revalidatePath(`/admin/projects/${phase.unit.project.id}`);
-  revalidatePath(`/admin/projects/${phase.unit.project.id}/units/${phase.unit.id}`);
+  revalidatePath(`/engineer/sites/${phase.project.id}`);
+  revalidatePath(`/admin/projects/${phase.project.id}`);
   revalidatePath('/admin/projects');
+  revalidatePath('/customer');
   revalidatePath('/customer/progress');
 
   const photoNote =

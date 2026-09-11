@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import type { LeadSource } from '@prisma/client';
+import type { BuildingType, LeadSource } from '@prisma/client';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,7 +17,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { LEAD_SOURCES, LOCAL_CONTACT_RELATIONS, SOURCE_LABEL } from '@/lib/leads';
+import {
+  BUILDING_TYPE_LABEL,
+  BUILDING_TYPES,
+  LEAD_SOURCES,
+  LOCAL_CONTACT_RELATIONS,
+  SOURCE_LABEL,
+} from '@/lib/leads';
 import { COMMON_COUNTRIES, OTHER_COUNTRIES, OTHER_COUNTRY } from '@/lib/countries';
 import { PhoneInput } from '@/components/form/phone-input';
 import { validateForm } from '@/lib/validations/form';
@@ -36,8 +42,10 @@ export type EditableLead = {
   residenceCountry: string | null;
   email: string | null;
   source: LeadSource;
-  unitId: string | null;
   projectLocation: string | null;
+  /** জমির আয়তন — free text ("৪ কাঠা", "৫ শতক") */
+  landSize: string | null;
+  buildingType: BuildingType | null;
   budgetMin: string | null;
   budgetMax: string | null;
   assignedToId: string | null;
@@ -49,7 +57,6 @@ export type EditableLead = {
 };
 
 export type ExecutiveOption = { id: string; name: string; role: string };
-export type UnitOption = { id: string; label: string };
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -61,7 +68,6 @@ export function LeadFormDialog({
   onOpenChange,
   lead,
   executives,
-  units,
   /** ADMIN হলে true — নইলে লিড নিজের নামেই তৈরি/থাকবে */
   canAssign,
   onCreated,
@@ -71,7 +77,6 @@ export function LeadFormDialog({
   /** না দিলে নতুন লিড তৈরির মোড */
   lead?: EditableLead;
   executives: ExecutiveOption[];
-  units: UnitOption[];
   canAssign: boolean;
   onCreated?: (leadId: string) => void;
 }) {
@@ -228,40 +233,52 @@ export function LeadFormDialog({
               <FieldError message={errors.source} />
             </div>
 
+            {/* PRD সেকশন ৫.১ — ক্লায়েন্ট কী ধরনের বাড়ি চান */}
             <div className="space-y-2">
-              <Label htmlFor="lead-unit">আগ্রহী ইউনিট (ঐচ্ছিক)</Label>
+              <Label htmlFor="lead-building-type">বাড়ির ধরন (ঐচ্ছিক)</Label>
               <NativeSelect
-                id="lead-unit"
-                name="unitId"
-                defaultValue={lead?.unitId ?? ''}
-                disabled={units.length === 0}
+                id="lead-building-type"
+                name="buildingType"
+                defaultValue={lead?.buildingType ?? ''}
               >
                 <option value="">— নির্ধারিত নয় —</option>
-                {units.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.label}
+                {BUILDING_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {BUILDING_TYPE_LABEL[type]}
                   </option>
                 ))}
               </NativeSelect>
-              {units.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  এখনো কোনো ইউনিট যোগ হয়নি — প্রজেক্ট/ইউনিট মডিউল Phase 3 এ আসছে।
-                </p>
-              ) : null}
-              <FieldError message={errors.unitId} />
+              <FieldError message={errors.buildingType} />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="lead-project-location">প্রজেক্ট / জমির অবস্থান (ঐচ্ছিক)</Label>
-            <Input
-              id="lead-project-location"
-              name="projectLocation"
-              placeholder="যেমন: সোনাডাঙ্গা, খুলনা — নিজস্ব জমি"
-              defaultValue={lead?.projectLocation ?? ''}
-              autoComplete="off"
-            />
-            <FieldError message={errors.projectLocation} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="lead-project-location">জমির অবস্থান (ঐচ্ছিক)</Label>
+              <Input
+                id="lead-project-location"
+                name="projectLocation"
+                placeholder="যেমন: সোনাডাঙ্গা, খুলনা — নিজস্ব জমি"
+                defaultValue={lead?.projectLocation ?? ''}
+                autoComplete="off"
+              />
+              <FieldError message={errors.projectLocation} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lead-land-size">জমির আয়তন (ঐচ্ছিক)</Label>
+              <Input
+                id="lead-land-size"
+                name="landSize"
+                placeholder="যেমন: ৪ কাঠা / ৫ শতক"
+                defaultValue={lead?.landSize ?? ''}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                একক যেভাবে বলা হয়েছে সেভাবেই লিখুন — কাঠা, শতক, বিঘা সবই চলবে।
+              </p>
+              <FieldError message={errors.landSize} />
+            </div>
           </div>
 
           <fieldset className="space-y-2">

@@ -2,6 +2,8 @@
 
 **Tech stack decided:** Next.js (App Router) + PostgreSQL + Prisma + Responsive Web (mobile browser দিয়েই engineer/customer প্যানেল চলবে, native app নয়)
 
+**v2 আপডেট (9 Sep 2026):** Business model সংশোধন হয়েছে (Orion শুধু কনস্ট্রাকশন সার্ভিস দেয়, multi-unit sale না) — দেখুন `01_PRD.md` v2 ও `09_BUSINESS_MODEL_MIGRATION_PROMPT.md`। বর্তমান progress: Phase 0, 1, 2, ব্র্যান্ড ইন্টিগ্রেশন, Phase 2 প্রবাসী-correction সম্পন্ন। এখন **Phase 2.5 (Business Model Migration)** চালানো লাগবে Phase 3 শুরু করার আগে।
+
 ---
 
 ## ১. Tech Stack (Final)
@@ -87,38 +89,44 @@ orion-crm/
 - Lead → "Won" হলে auto Project/Customer/Sale draft তৈরি
 - Marketing executive dashboard (নিজের লিড, funnel সংখ্যা)
 
-**Claude Code prompt:**
-> "Lead model এর জন্য একটি Kanban-style pipeline board বানাও (stages: New Lead, Contacted, Site Visit Scheduled, Site Visit Done, Negotiation, Booking, Sale Agreement Signed, Won, Lost) — drag & drop দিয়ে stage change করা যাবে, প্রতিটি lead card এ name, phone, assigned executive, next follow-up date দেখাবে।"
+**Claude Code prompt:** (সম্পন্ন — `04_PROMPTS.md` এ historical রেকর্ড হিসেবে আছে)
 
-### Phase 3 — Project, Unit & Phase Timeline (৫–৭ দিন)
+### Phase 2.5 — Business Model Migration (নতুন, ১–২ দিন) ⚠️ Phase 3 এর আগে বাধ্যতামূলক
 
-- Project + Unit CRUD (Admin)
-- Phase template তৈরি ও প্রজেক্টে অ্যাসাইন (default template + customizable)
+- Schema v2 migration: Unit/Sale সরিয়ে সরাসরি Lead→Project মডেলে আনা
+- Lead pipeline stage rework (নতুন construction workflow stages)
+- LeadChecklistItem (documents/tasks checklist)
+- Pre-project LedgerEntry (service billing + internal cost)
+- Follow-up ও Performance পেজ (Sales sidebar এ আগে থেকে placeholder ছিল, কাজ করছিল না) বিল্ড করা
+
+**Claude Code prompt:** `09_BUSINESS_MODEL_MIGRATION_PROMPT.md` দেখুন।
+
+### Phase 3 — Project & Phase Timeline (৪–৬ দিন)
+
+- Project CRUD (Lead থেকে Won হলে convert, Admin এডিট করতে পারবে)
+- Phase template (global, customizable) ও Project এ instantiate
 - Site Engineer: phase update UI (% complete, photo upload, remarks)
-- Visual timeline component (progress bar / stepper — Admin ও Customer উভয়ের জন্য reusable)
+- Visual timeline component (progress bar / stepper — Admin, Engineer, Customer এ reusable)
+- Live CC camera URL ফিল্ড (Admin সেট করবে, Customer পোর্টালে embed হবে)
 
-**Claude Code prompt:**
-> "PRD সেকশন ৫.২ অনুযায়ী Phase timeline কম্পোনেন্ট বানাও — একটি horizontal stepper/progress bar যা প্রতিটি phase এর status (upcoming/in-progress/done), planned vs actual date, % complete দেখাবে। Site Engineer প্যানেলে একটি ফর্ম বানাও যেখান থেকে % complete আপডেট ও ফটো আপলোড করা যাবে।"
+**Claude Code prompt:** `04_PROMPTS.md` এর Phase 3 (v2, Unit ছাড়া) দেখুন।
 
-### Phase 4 — Payment Plan & Accounts Module (৫–৭ দিন)
+### Phase 4 — Payment Plan & Accounts Ledger Module (৬–৮ দিন)
 
-- Payment plan template builder (Admin/Accounts)
-- Installment schedule generation (auto, PRD সেকশন ৫.৩ অনুযায়ী)
-- Payment receive entry + PDF receipt generation
+- Payment plan builder, phase-linked installment (Admin/Accounts)
+- Payment receive entry + PDF receipt + WhatsApp send (wa.me deep-link)
 - Overdue detection + aging report
-- Financial dashboard (collected vs receivable, overdue)
+- **Accounts Ledger module (নতুন):** client-wise + company-wide LedgerEntry, profit/loss রিপোর্ট, client cost এন্ট্রি (customer-invisible)
 
-**Claude Code prompt:**
-> "PRD সেকশন ৫.৩ অনুযায়ী PaymentPlan ও Installment মডেলের ভিত্তিতে একটি payment schedule টেবিল UI বানাও (status: Paid/Partial/Overdue/Scheduled রঙ-কোডেড)। Accounts panel এ payment entry ফর্ম বানাও, entry দিলে auto receipt PDF generate হবে এবং installment status আপডেট হবে।"
+**Claude Code prompt:** `04_PROMPTS.md` এর Phase 4 (v2) দেখুন।
 
 ### Phase 5 — Customer Portal (৩–৪ দিন)
 
-- Customer login → নিজের project summary, timeline, payment history, documents
+- Customer login → নিজের project summary, timeline, লাইভ ক্যামেরা, payment history, documents
 - Downloadable invoice/receipt
 - Simple support ticket (optional stretch)
 
-**Claude Code prompt:**
-> "Customer panel বানাও যেখানে লগইন করা কাস্টমার তার নিজের ইউনিটের progress timeline, payment schedule (paid/due), এবং document list দেখতে পাবে (read-only)। Payment history থেকে receipt PDF download করা যাবে।"
+**Claude Code prompt:** `04_PROMPTS.md` এর Phase 5 (v2) দেখুন।
 
 ### Phase 6 — Notifications, Reports & Dashboard (৪–৫ দিন)
 
@@ -141,17 +149,18 @@ orion-crm/
 
 ## ৪. মোট আনুমানিক সময়
 
-| Phase | দিন (estimate) |
-|---|---|
-| 0 — Setup | ১–২ |
-| 1 — Auth/RBAC | ২–৩ |
-| 2 — Lead/Pipeline | ৪–৬ |
-| 3 — Project/Phase | ৫–৭ |
-| 4 — Payment | ৫–৭ |
-| 5 — Customer Portal | ৩–৪ |
-| 6 — Reports/Notification | ৪–৫ |
-| 7 — Polish/Deploy | ৩–৫ |
-| **মোট** | **~২৭–৩৯ কর্মদিবস** (একজন solo developer + Claude Code দিয়ে, ফুল-টাইম কাজ ধরে ~৬–৮ সপ্তাহ) |
+| Phase | দিন (estimate) | Status |
+|---|---|---|
+| 0 — Setup | ১–২ | ✅ সম্পন্ন |
+| 1 — Auth/RBAC | ২–৩ | ✅ সম্পন্ন |
+| 2 — Lead/Pipeline | ৪–৬ | ✅ সম্পন্ন (+ ব্র্যান্ড + প্রবাসী correction) |
+| 2.5 — Business Model Migration | ১–২ | ⏳ এখন |
+| 3 — Project/Phase | ৪–৬ | বাকি |
+| 4 — Payment/Accounts Ledger | ৬–৮ | বাকি |
+| 5 — Customer Portal | ৩–৪ | বাকি |
+| 6 — Reports/Notification | ৪–৫ | বাকি |
+| 7 — Polish/Deploy | ৩–৫ | বাকি |
+| **মোট** | **~২৮–৪১ কর্মদিবস** (একজন solo developer + Claude Code দিয়ে, ফুল-টাইম কাজ ধরে ~৬–৮ সপ্তাহ) |
 
 ---
 

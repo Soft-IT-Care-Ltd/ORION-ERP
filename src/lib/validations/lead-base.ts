@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { LEAD_FILE_TYPES, LEAD_SOURCES, LEAD_STAGES, LOST_REASONS } from '@/lib/leads';
+import {
+  BUILDING_TYPES,
+  LEAD_FILE_TYPES,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  LOST_REASONS,
+} from '@/lib/leads';
 import { COUNTRIES, OTHER_COUNTRY } from '@/lib/countries';
 import {
   id,
@@ -49,8 +55,17 @@ export const baseLead = z.object({
   source: z.enum(LEAD_SOURCES as unknown as [string, ...string[]], {
     errorMap: () => ({ message: 'সোর্স নির্বাচন করুন' }),
   }),
-  unitId: optionalId,
   projectLocation: optionalText(160, 'লোকেশন খুব বড় হয়ে গেছে'),
+  // PRD সেকশন ৫.১ — জমির আয়তন free-text (বাংলাদেশে কাঠা/শতক/বিঘা সব চলে)
+  landSize: optionalText(40, 'আয়তনটি খুব বড় হয়ে গেছে'),
+  buildingType: z
+    .string()
+    .optional()
+    .transform((v) => (v?.trim() ? v.trim() : undefined))
+    .refine(
+      (v) => v === undefined || (BUILDING_TYPES as string[]).includes(v),
+      'বাড়ির ধরন নির্বাচন করুন',
+    ),
   budgetMin: optionalAmount,
   budgetMax: optionalAmount,
   assignedToId: optionalId,

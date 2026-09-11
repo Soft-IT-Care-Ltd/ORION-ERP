@@ -26,13 +26,15 @@ type Actor = { id: string; role: Role };
 /* --------------------------------------------------------------- scope */
 
 /**
- * সেল-লেভেল ownership — PRD সেকশন ৪: ADMIN ও ACCOUNTS সব সেল দেখেন,
- * CUSTOMER শুধু নিজেরটা (read-only)।
+ * বিলিং-লেভেল ownership — PRD সেকশন ৪: ADMIN ও ACCOUNTS সব প্রজেক্টের হিসাব
+ * দেখেন, CUSTOMER শুধু নিজেরটা (read-only)।
  *
  * `lib/lead-access.ts` / `lib/project-access.ts` এর মতোই প্রতিটি কুয়েরিতে এই
- * where-clause spread করতে হবে — নইলে অন্যের sale id গেস করে দেখে ফেলা যেত।
+ * where-clause spread করতে হবে — নইলে অন্যের প্রজেক্ট id গেস করে দেখে ফেলা যেত।
+ * (`projectScope` ইঞ্জিনিয়ারের জন্য, এটি অ্যাকাউন্টস/কাস্টমারের জন্য — দুটোর
+ * নিয়ম আলাদা, তাই আলাদা ফাংশন।)
  */
-export function saleScope(user: Actor): Prisma.SaleWhereInput {
+export function billingScope(user: Actor): Prisma.ProjectWhereInput {
   if (can(user.role, 'paymentPlan:manage')) return {};
   return { customer: { userId: user.id } };
 }
@@ -47,6 +49,8 @@ export const installmentSelect = {
   dueDate: true,
   amount: true,
   percentage: true,
+  phaseId: true,
+  phase: { select: { name: true } },
   payments: {
     select: {
       id: true,
@@ -61,12 +65,20 @@ export const installmentSelect = {
   },
 } satisfies Prisma.InstallmentSelect;
 
-/** সেল/ইউনিট/কাস্টমারের পরিচিতি — শিডিউল হেডার ও রসিদে যা দেখানো হয় */
-export const saleHeaderSelect = {
+/** প্রজেক্ট ও কাস্টমারের পরিচিতি — শিডিউল হেডার ও রসিদে যা দেখানো হয় */
+export const projectHeaderSelect = {
   id: true,
-  totalAmount: true,
-  saleDate: true,
+  title: true,
+  landLocation: true,
+  buildingType: true,
+  floors: true,
+  totalSqft: true,
+  ratePerSqft: true,
+  totalContractValue: true,
+  startDate: true,
   status: true,
+  createdAt: true,
+  lead: { select: { id: true, name: true, phone: true } },
   customer: {
     select: {
       id: true,
@@ -74,33 +86,25 @@ export const saleHeaderSelect = {
       user: { select: { id: true, name: true, phone: true, email: true } },
     },
   },
-  unit: {
-    select: {
-      id: true,
-      unitNo: true,
-      sizeSqft: true,
-      project: { select: { id: true, name: true, location: true } },
-    },
-  },
-} satisfies Prisma.SaleSelect;
+} satisfies Prisma.ProjectSelect;
 
-export type SaleHeader = Prisma.SaleGetPayload<{ select: typeof saleHeaderSelect }>;
+export type ProjectHeader = Prisma.ProjectGetPayload<{ select: typeof projectHeaderSelect }>;
 
 /* ---------------------------------------------------------- load plan */
 
-export type SalePlan = {
+export type ProjectPlan = {
   planId: string | null;
   installments: InstallmentView[];
   summary: PlanSummary;
 };
 
 /**
- * একটি সেলের পুরো পেমেন্ট শিডিউল। প্ল্যান এখনো তৈরি না হলে `planId` null ও
+ * একটি প্রজেক্টের পুরো পেমেন্ট শিডিউল। প্ল্যান এখনো তৈরি না হলে `planId` null ও
  * তালিকা খালি — UI তখন "প্ল্যান তৈরি করুন" দেখায়।
  */
-export async function loadSalePlan(saleId: string, now: Date): Promise<SalePlan> {
+export async function loadProjectPlan(projectId: string, now: Date): Promise<ProjectPlan> {
   const plan = await prisma.paymentPlan.findUnique({
-    where: { saleId },
+    where: { projectId },
     select: {
       id: true,
       installments: { select: installmentSelect, orderBy: [{ order: 'asc' }, { dueDate: 'asc' }] },
@@ -116,18 +120,21 @@ export async function loadSalePlan(saleId: string, now: Date): Promise<SalePlan>
   };
 }
 
-/** ইউজার এই সেলটি দেখতে পারবে কি না যাচাই করে হেডার ফেরত দেয় — না পারলে null */
-export async function findScopedSale(user: Actor, saleId: string): Promise<SaleHeader | null> {
-  return prisma.sale.findFirst({
-    where: { id: saleId, ...saleScope(user) },
-    select: saleHeaderSelect,
+/** ইউজার এই প্রজেক্টের হিসাব দেখতে পারবে কি না যাচাই করে হেডার দেয় — না পারলে null */
+export async function findScopedProjectHeader(
+  user: Actor,
+  projectId: string,
+): Promise<ProjectHeader | null> {
+  return prisma.project.findFirst({
+    where: { id: projectId, ...billingScope(user) },
+    select: projectHeaderSelect,
   });
 }
 
 /* ------------------------------------------------- overdue detection */
 
 /**
- * ওভারডিউ ডিটেকশন (PRD সেকশন ৫.৩)।
+ * ওভারডিউ ডিটেকশন (PRD সেকশন ৫.৫)।
  *
  * due date পেরিয়ে গেছে অথচ পুরো টাকা আসেনি — এমন কিস্তিকে OVERDUE লেখা হয়।
  * উল্টোটাও হয়: due date পিছিয়ে দিলে বা টাকা জমা পড়লে স্ট্যাটাস আবার ঠিক হয়ে যায়।
@@ -182,7 +189,7 @@ export async function markOverdueInstallments(now = new Date()) {
 
 export type OverdueRow = {
   installmentId: string;
-  saleId: string;
+  projectId: string;
   label: string;
   /** server এ ফরম্যাট করা — client এ করলে TZ ভেদে hydration mismatch হতো */
   dueDateLabel: string;
@@ -193,7 +200,7 @@ export type OverdueRow = {
   remaining: number;
   customerName: string;
   customerPhone: string | null;
-  unitLabel: string;
+  projectTitle: string;
 };
 
 export type AgingReport = {
@@ -201,12 +208,12 @@ export type AgingReport = {
   rows: OverdueRow[];
   totalAmount: number;
   totalCount: number;
-  /** কতগুলো আলাদা সেল/অ্যাকাউন্ট বকেয়া (PRD এর "7 accounts") */
+  /** কতগুলো আলাদা প্রজেক্ট/অ্যাকাউন্ট বকেয়া (PRD এর "7 accounts") */
   totalAccounts: number;
 };
 
 /**
- * PRD সেকশন ৫.৩ — overdue aging report (0-15 / 16-30 / 30+ দিন)।
+ * PRD সেকশন ৫.৫ — overdue aging report (0-15 / 16-30 / 30+ দিন)।
  * "amount" মানে অনাদায়ী অঙ্ক (কিস্তির মোট নয়) — আংশিক আদায় বাদ দিয়ে যা বাকি।
  */
 export async function loadAgingReport(now = new Date()): Promise<AgingReport> {
@@ -220,11 +227,11 @@ export async function loadAgingReport(now = new Date()): Promise<AgingReport> {
       payments: { select: { amountReceived: true } },
       paymentPlan: {
         select: {
-          sale: {
+          project: {
             select: {
               id: true,
+              title: true,
               customer: { select: { user: { select: { name: true, phone: true } } } },
-              unit: { select: { unitNo: true, project: { select: { name: true } } } },
             },
           },
         },
@@ -250,19 +257,19 @@ export async function loadAgingReport(now = new Date()): Promise<AgingReport> {
       Math.round((startOfDay(now).getTime() - startOfDay(row.dueDate).getTime()) / 86_400_000),
     );
     const bucket = agingBucket(days);
-    const sale = row.paymentPlan.sale;
+    const project = row.paymentPlan.project;
 
     const target = buckets.find((b) => b.bucket === bucket)!;
     target.count += 1;
     target.amount += remaining;
     const set = bucketAccounts.get(bucket) ?? new Set<string>();
-    set.add(sale.id);
+    set.add(project.id);
     bucketAccounts.set(bucket, set);
-    accounts.add(sale.id);
+    accounts.add(project.id);
 
     detail.push({
       installmentId: row.id,
-      saleId: sale.id,
+      projectId: project.id,
       label: row.label,
       dueDateLabel: format(row.dueDate, 'dd MMM yyyy'),
       overdueDays: days,
@@ -270,9 +277,9 @@ export async function loadAgingReport(now = new Date()): Promise<AgingReport> {
       amount,
       paidAmount,
       remaining,
-      customerName: sale.customer.user.name,
-      customerPhone: sale.customer.user.phone,
-      unitLabel: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
+      customerName: project.customer.user.name,
+      customerPhone: project.customer.user.phone,
+      projectTitle: project.title,
     });
   }
 
@@ -303,11 +310,11 @@ export type CollectionKpi = {
   planTotal: number;
   planCollected: number;
   outstanding: number;
-  /** পেমেন্ট প্ল্যান এখনো সেট হয়নি এমন সেল (ড্রাফট) */
+  /** পেমেন্ট প্ল্যান এখনো সেট হয়নি এমন প্রজেক্ট */
   plansPending: number;
 };
 
-/** অ্যাকাউন্টস ড্যাশবোর্ডের সংখ্যাগুলো — PRD সেকশন ৫.৩ (Dashboard KPI) */
+/** অ্যাকাউন্টস ড্যাশবোর্ডের সংখ্যাগুলো — PRD সেকশন ৫.৫ (Dashboard KPI) */
 export async function loadCollectionKpi(now = new Date()): Promise<CollectionKpi> {
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
@@ -324,7 +331,7 @@ export async function loadCollectionKpi(now = new Date()): Promise<CollectionKpi
     }),
     prisma.installment.aggregate({ _sum: { amount: true } }),
     prisma.payment.aggregate({ _sum: { amountReceived: true } }),
-    prisma.sale.count({ where: { paymentPlan: null } }),
+    prisma.project.count({ where: { paymentPlan: null } }),
   ]);
 
   const monthReceivable = monthDue.reduce((sum, row) => {

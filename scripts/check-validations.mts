@@ -23,7 +23,10 @@ import * as userNs from '../src/lib/validations/user';
 import * as leadBaseNs from '../src/lib/validations/lead-base';
 import * as projectNs from '../src/lib/validations/project';
 import * as paymentNs from '../src/lib/validations/payment';
-import * as saleNs from '../src/lib/validations/sale';
+import * as convertNs from '../src/lib/validations/convert';
+import * as ledgerNs from '../src/lib/validations/ledger';
+import * as checklistNs from '../src/lib/validations/checklist';
+import * as followUpNs from '../src/lib/validations/follow-up';
 import * as documentNs from '../src/lib/validations/document';
 
 /** CJS ইন্টারঅপ — আসল exports গুলো `default` এর ভেতরে পড়ে যায় */
@@ -37,17 +40,23 @@ const user = mod(userNs);
 const leadBase = mod(leadBaseNs);
 const project = mod(projectNs);
 const payment = mod(paymentNs);
-const sale = mod(saleNs);
+const convert = mod(convertNs);
+const ledger = mod(ledgerNs);
+const checklist = mod(checklistNs);
+const followUp = mod(followUpNs);
 const document = mod(documentNs);
 
 const { formValues, validate } = form;
 const { parseLocalDate } = common;
 const { createUserSchema, resetPasswordSchema, updateUserSchema } = user;
 const { leadFormSchema, changeStageSchema, addNoteSchema } = leadBase;
-const { projectSchema, unitSchema, phaseUpdateSchema, savePhaseTemplateSchema } = project;
+const { updateProjectSchema, phaseUpdateSchema, savePhaseTemplateSchema } = project;
 const { generatePlanSchema, paymentEntrySchema, saveScheduleSchema } = payment;
-const { convertLeadSchema } = sale;
-const { uploadSaleDocumentSchema } = document;
+const { convertLeadSchema } = convert;
+const { ledgerEntrySchema } = ledger;
+const { addChecklistItemSchema } = checklist;
+const { logFollowUpSchema } = followUp;
+const { uploadProjectDocumentSchema } = document;
 
 let passed = 0;
 const failures: string[] = [];
@@ -195,25 +204,51 @@ test('addNote — খুব ছোট নোট আটকায়', () => {
 
 /* ------------------------------------------------------------ project */
 
-test('project — startDate খালি হলে null', () => {
-  const data = ok(projectSchema, { name: 'Orion Green', location: 'খুলনা', startDate: '', engineerId: '' });
+/** v2 — প্রজেক্ট তৈরি হয় Lead→Won কনভার্শনে, তাই এখানে শুধু এডিটের স্কিমা */
+const validProject = {
+  id: 'p1',
+  title: 'রহিম সাহেবের ডুপ্লেক্স',
+  totalContractValue: '60,00,000',
+  status: 'ACTIVE',
+};
+
+test('project — খালি ঐচ্ছিক ফিল্ডগুলো null হয়', () => {
+  const data = ok(updateProjectSchema, {
+    ...validProject,
+    landLocation: '',
+    buildingType: '',
+    floors: '',
+    totalSqft: '',
+    ratePerSqft: '',
+    startDate: '',
+    cameraStreamUrl: '',
+    engineerId: '',
+  });
+  assert.equal(data.totalContractValue, 6000000);
   assert.equal(data.startDate, null);
+  assert.equal(data.buildingType, null);
+  assert.equal(data.cameraStreamUrl, null);
   assert.equal(data.engineerId, null);
 });
 
-test('project — অবৈধ তারিখ আটকায়', () => {
-  failsOn(projectSchema, { name: 'Orion Green', location: 'খুলনা', startDate: '2026-02-31' }, 'startDate');
+test('project — অবৈধ তারিখ ও তলার সংখ্যা আটকায়', () => {
+  failsOn(updateProjectSchema, { ...validProject, startDate: '2026-02-31' }, 'startDate');
+  failsOn(updateProjectSchema, { ...validProject, floors: '0' }, 'floors');
+  failsOn(updateProjectSchema, { ...validProject, floors: '99' }, 'floors');
 });
 
-test('unit — কমা সহ মূল্য চলে, ঋণাত্মক নয়', () => {
-  const data = ok(unitSchema, { projectId: 'p1', unitNo: 'A-1', sizeSqft: '1,250', price: '45,00,000', status: 'AVAILABLE' });
-  assert.equal(data.price, 4500000);
-  assert.equal(data.sizeSqft, 1250);
-  failsOn(unitSchema, { projectId: 'p1', unitNo: 'A-1', price: '-5', status: 'AVAILABLE' }, 'price');
+test('project — ক্যামেরার লিংক শুধু http/https', () => {
+  // `javascript:` স্কিম iframe এ বসলে কাস্টমারের ব্রাউজারে স্ক্রিপ্ট চলত
+  failsOn(updateProjectSchema, { ...validProject, cameraStreamUrl: 'javascript:alert(1)' }, 'cameraStreamUrl');
+  failsOn(updateProjectSchema, { ...validProject, cameraStreamUrl: 'not a url' }, 'cameraStreamUrl');
+  const data = ok(updateProjectSchema, { ...validProject, cameraStreamUrl: 'https://cam.example/live' });
+  assert.equal(data.cameraStreamUrl, 'https://cam.example/live');
 });
 
-test('unit — অস্বাভাবিক বড় মূল্য আটকায়', () => {
-  failsOn(unitSchema, { projectId: 'p1', unitNo: 'A-1', price: '99999999999999', status: 'AVAILABLE' }, 'price');
+test('project — বাড়ির ধরন তালিকার বাইরে হলে আটকায়', () => {
+  failsOn(updateProjectSchema, { ...validProject, buildingType: 'PENTHOUSE' }, 'buildingType');
+  const data = ok(updateProjectSchema, { ...validProject, buildingType: 'DUPLEX' });
+  assert.equal(data.buildingType, 'DUPLEX');
 });
 
 test('phaseUpdate — % শুধু ০/২৫/৫০/৭৫/১০০', () => {
@@ -221,18 +256,22 @@ test('phaseUpdate — % শুধু ০/২৫/৫০/৭৫/১০০', () => 
   failsOn(phaseUpdateSchema, { phaseId: 'ph1', percentComplete: '63' }, 'percentComplete');
 });
 
-test('phaseTemplate — একই নাম দুবার আটকায়', () => {
+test('phaseTemplate — একই নাম দুবার আটকায় (v2: গ্লোবাল, projectId নেই)', () => {
   failsOn(
     savePhaseTemplateSchema,
-    { projectId: 'p1', phases: [{ name: 'Foundation', defaultDurationDays: '30' }, { name: 'foundation', defaultDurationDays: '20' }] },
+    { phases: [{ name: 'Foundation', defaultDurationDays: '30' }, { name: 'foundation', defaultDurationDays: '20' }] },
     'phases',
   );
+  const data = ok(savePhaseTemplateSchema, {
+    phases: [{ name: 'Foundation Work', defaultDurationDays: '40' }, { name: 'Finishing', defaultDurationDays: '0' }],
+  });
+  assert.equal(data.phases[1].defaultDurationDays, null, '০ দিন মানে সময়কাল নেই');
 });
 
 /* ------------------------------------------------------------ payment */
 
 const validPlan = {
-  saleId: 's1',
+  projectId: 'p1',
   bookingDate: '2026-01-05',
   bookingPercent: '10',
   downPaymentPercent: '15',
@@ -255,13 +294,18 @@ test('generatePlan — শতাংশের যোগফল ১০০% ছু�
   failsOn(generatePlanSchema, { ...validPlan, monthlyPercent: '5' }, 'monthlyPercent');
 });
 
-test('saveSchedule — খালি তালিকা আটকায়, অঙ্ক রাউন্ড হয়', () => {
-  failsOn(saveScheduleSchema, { saleId: 's1', installments: [] }, 'installments');
+test('saveSchedule — খালি তালিকা আটকায়, অঙ্ক রাউন্ড হয়, ফেজ লিংক ঐচ্ছিক', () => {
+  failsOn(saveScheduleSchema, { projectId: 'p1', installments: [] }, 'installments');
   const data = ok(saveScheduleSchema, {
-    saleId: 's1',
-    installments: [{ label: 'Booking Money', dueDate: '2026-01-05', amount: '450000.6' }],
+    projectId: 'p1',
+    installments: [
+      { label: 'Signup Money', dueDate: '2026-01-05', amount: '450000.6', phaseId: '' },
+      { label: 'Foundation Complete', dueDate: '2026-03-05', amount: '800000', phaseId: 'ph1' },
+    ],
   });
   assert.equal(data.installments[0].amount, 450001);
+  assert.equal(data.installments[0].phaseId, null, 'খালি ফেজ → null');
+  assert.equal(data.installments[1].phaseId, 'ph1');
 });
 
 test('paymentEntry — কিস্তি ও ধনাত্মক অঙ্ক লাগে', () => {
@@ -273,19 +317,89 @@ test('paymentEntry — কিস্তি ও ধনাত্মক অঙ্ক
   assert.equal(data.receiptNo, undefined, 'শুধু স্পেস হলে undefined — server নিজে রসিদ নম্বর বানাবে');
 });
 
-/* -------------------------------------------------------- sale / docs */
+/* ------------------------------------------------- convert (Lead→Project) */
 
-test('convertLead — ইউনিট ও মূল্য লাগে, ইমেইল ঐচ্ছিক', () => {
-  failsOn(convertLeadSchema, { leadId: 'l1', unitId: '', totalAmount: '4500000' }, 'unitId');
-  failsOn(convertLeadSchema, { leadId: 'l1', unitId: 'u1', totalAmount: '4500000', customerEmail: 'not-an-email' }, 'customerEmail');
-  const data = ok(convertLeadSchema, { leadId: 'l1', unitId: 'u1', totalAmount: '45,00,000', customerEmail: '' });
-  assert.equal(data.totalAmount, 4500000);
+test('convertLead — কন্ট্রাক্ট ভ্যালু লাগে, রেট/sqft ও ইমেইল ঐচ্ছিক', () => {
+  failsOn(convertLeadSchema, { leadId: 'l1', totalContractValue: '' }, 'totalContractValue');
+  failsOn(convertLeadSchema, { leadId: 'l1', totalContractValue: '-5' }, 'totalContractValue');
+  failsOn(
+    convertLeadSchema,
+    { leadId: 'l1', totalContractValue: '4500000', customerEmail: 'not-an-email' },
+    'customerEmail',
+  );
+
+  const data = ok(convertLeadSchema, {
+    leadId: 'l1',
+    totalContractValue: '45,00,000',
+    ratePerSqft: '2200',
+    totalSqft: '',
+    startDate: '',
+    customerEmail: '',
+  });
+  assert.equal(data.totalContractValue, 4500000);
+  assert.equal(data.ratePerSqft, 2200);
+  assert.equal(data.totalSqft, null);
+  assert.equal(data.startDate, null);
   assert.equal(data.customerEmail, undefined);
 });
 
-test('saleDocument — তালিকার বাইরের ধরন আটকায়', () => {
-  failsOn(uploadSaleDocumentSchema, { saleId: 's1', type: 'Random Paper' }, 'type');
-  ok(uploadSaleDocumentSchema, { saleId: 's1', type: 'Sale Agreement', description: '  ' });
+/* ------------------------------------------------------------- ledger */
+
+test('ledgerEntry — ধনাত্মক অঙ্ক ও বৈধ type/category লাগে', () => {
+  failsOn(ledgerEntrySchema, { type: 'INCOME', category: 'SOIL_TEST', amount: '0', date: '2026-01-05' }, 'amount');
+  failsOn(ledgerEntrySchema, { type: 'REFUND', category: 'SOIL_TEST', amount: '5000', date: '2026-01-05' }, 'type');
+  failsOn(ledgerEntrySchema, { type: 'INCOME', category: 'BRIBE', amount: '5000', date: '2026-01-05' }, 'category');
+  failsOn(ledgerEntrySchema, { type: 'INCOME', category: 'SOIL_TEST', amount: '5000', date: '' }, 'date');
+});
+
+test('ledgerEntry — leadId খালি হলে company-wide entry (null)', () => {
+  const data = ok(ledgerEntrySchema, {
+    leadId: '',
+    type: 'EXPENSE',
+    category: 'OFFICE_OVERHEAD',
+    amount: '12,500.4',
+    date: '2026-01-05',
+    note: '  ',
+  });
+  assert.equal(data.leadId, null);
+  assert.equal(data.amount, 12500, 'পয়সা বাদ — পূর্ণ টাকা');
+  assert.equal(data.note, undefined);
+});
+
+test('ledgerEntry — clientVisible ইনপুটে নেই', () => {
+  // PRD সেকশন ৪: EXPENSE কখনো ক্লায়েন্ট দেখবে না, তাই মানটি server এ `type`
+  // থেকেই ঠিক হয় — অ্যাকশন সরাসরি ডেকেও true পাঠানো যায় না
+  const data = ok(ledgerEntrySchema, {
+    type: 'EXPENSE',
+    category: 'MATERIAL_COST',
+    amount: '1000',
+    date: '2026-01-05',
+    clientVisible: true,
+  }) as Record<string, unknown>;
+  assert.equal('clientVisible' in data, false);
+});
+
+/* ---------------------------------------------------- checklist / follow-up */
+
+test('checklist — খুব ছোট label আটকায়', () => {
+  failsOn(addChecklistItemSchema, { leadId: 'l1', label: 'x' }, 'label');
+  const data = ok(addChecklistItemSchema, { leadId: 'l1', label: '  সাইট ভিজিট সম্পন্ন  ', note: '' });
+  assert.equal(data.label, 'সাইট ভিজিট সম্পন্ন');
+  assert.equal(data.note, undefined);
+});
+
+test('followUp — নোট লাগে, তারিখ ঐচ্ছিক', () => {
+  failsOn(logFollowUpSchema, { leadId: 'l1', note: 'x' }, 'note');
+  failsOn(logFollowUpSchema, { leadId: 'l1', note: 'ফোনে কথা হয়েছে', nextFollowUpAt: '2026-02-31' }, 'nextFollowUpAt');
+  const data = ok(logFollowUpSchema, { leadId: 'l1', note: 'ফোনে কথা হয়েছে', nextFollowUpAt: '' });
+  assert.equal(data.nextFollowUpAt, undefined, 'খালি মানে "আর ফলো-আপ নেই"');
+});
+
+/* ----------------------------------------------------------- documents */
+
+test('projectDocument — তালিকার বাইরের ধরন আটকায়', () => {
+  failsOn(uploadProjectDocumentSchema, { projectId: 'p1', type: 'Random Paper' }, 'type');
+  ok(uploadProjectDocumentSchema, { projectId: 'p1', type: 'Contract', description: '  ' });
 });
 
 /* -------------------------------------------------------------- ফলাফল */

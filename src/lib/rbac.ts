@@ -27,7 +27,9 @@ export const ROLE_HOME: Record<Role, string> = {
  */
 export const ROUTE_ROLES: Record<string, Role[]> = {
   '/admin': ['ADMIN'],
-  '/sales': ['ADMIN', 'MARKETING'],
+  // ACCOUNTS লিড ডিটেইলে ঢোকে শুধু pre-project billing এর জন্য (PRD সেকশন ৫.২);
+  // পাইপলাইন বোর্ড/এডিট তার permission এ নেই, তাই পেজগুলো নিজেরাই সেটি লুকায়
+  '/sales': ['ADMIN', 'MARKETING', 'ACCOUNTS'],
   '/engineer': ['ADMIN', 'ENGINEER'],
   '/accounts': ['ADMIN', 'ACCOUNTS'],
   '/customer': ['CUSTOMER'],
@@ -45,6 +47,12 @@ export type Permission =
   | 'lead:viewOwn'
   | 'lead:changeStage'
   | 'lead:convert'
+  // Lead checklist — যারা লিড এডিট করতে পারে তারাই আইটেম যোগ/টিক করতে পারে
+  | 'checklist:manage'
+  // Pre-project billing ও internal cost (PRD সেকশন ৪ — শুধু Admin/Accounts)
+  | 'ledger:manage'
+  // লেজার এন্ট্রি *দেখা* — MARKETING read-only দেখে, তৈরি করতে পারে না
+  | 'ledger:view'
   | 'project:manage'
   | 'phase:update'
   | 'phase:view'
@@ -54,10 +62,10 @@ export type Permission =
   | 'receipt:generate'
   | 'receipt:download'
   | 'document:upload'
-  // সেল/কাস্টমারের কাগজপত্র (booking form, allotment letter …) — PRD সেকশন ৪ এর
-  // "ডকুমেন্ট আপলোড/দেখা" সারিতে Accounts এর ঘরে "Payment-related"; লিড ডকুমেন্টের
-  // `document:upload` থেকে আলাদা, নইলে MARKETING/ENGINEER ও সেলে ফাইল দিতে পারত
-  | 'document:manageSale'
+  // প্রজেক্টের কাগজপত্র (কন্ট্রাক্ট, গভঃ অনুমোদন কপি, রসিদ …) — PRD সেকশন ৪ এর
+  // "ডকুমেন্ট আপলোড/দেখা" সারিতে Accounts এর ঘরে "Billing-related"; লিড ডকুমেন্টের
+  // `document:upload` থেকে আলাদা, নইলে MARKETING/ENGINEER ও প্রজেক্টে ফাইল দিতে পারত
+  | 'document:manageProject'
   | 'document:viewOwn'
   | 'document:viewAll'
   | 'report:full'
@@ -73,6 +81,9 @@ const ALL_PERMISSIONS: Permission[] = [
   'lead:viewOwn',
   'lead:changeStage',
   'lead:convert',
+  'checklist:manage',
+  'ledger:manage',
+  'ledger:view',
   'project:manage',
   'phase:update',
   'phase:view',
@@ -82,7 +93,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'receipt:generate',
   'receipt:download',
   'document:upload',
-  'document:manageSale',
+  'document:manageProject',
   'document:viewOwn',
   'document:viewAll',
   'report:full',
@@ -103,6 +114,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'lead:viewOwn',
     'lead:changeStage',
     'lead:convert',
+    'checklist:manage',
+    // PRD সেকশন ৪ — "Pre-project service billing: ❌ (শুধু অনুরোধ করতে পারবে)"।
+    // তাই দেখার অনুমতি আছে, তৈরির (`ledger:manage`) নেই
+    'ledger:view',
     'document:upload',
     'report:ownPerformance',
   ],
@@ -112,12 +127,19 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
   // Accounts — payment plan ও collection
   ACCOUNTS: [
+    // PRD সেকশন ৫.২ — pre-project billing Accounts এর কাজ, আর সেটি লিডের সঙ্গেই
+    // বাঁধা। তাই লিড *দেখা* লাগে; এডিট/স্টেজ/কনভার্ট কোনোটিই এখানে নেই, ফলে
+    // অ্যাকাউন্টস লিড ডিটেইলে ঢুকলেও শুধু Billing ট্যাবেই কাজ করতে পারে
+    'lead:viewOwn',
+    'lead:viewAll',
+    'ledger:manage',
+    'ledger:view',
     'paymentPlan:manage',
     'paymentPlan:view',
     'payment:create',
     'receipt:generate',
     'document:upload',
-    'document:manageSale',
+    'document:manageProject',
     'report:financial',
   ],
 

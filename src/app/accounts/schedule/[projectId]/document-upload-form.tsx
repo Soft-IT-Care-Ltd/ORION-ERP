@@ -17,17 +17,17 @@ import {
   UPLOAD_ACCEPT,
 } from '@/lib/upload-limits';
 import { validate } from '@/lib/validations/form';
-import { uploadSaleDocumentSchema } from '@/lib/validations/document';
-import { uploadSaleDocuments } from './document-actions';
+import { uploadProjectDocumentSchema } from '@/lib/validations/document';
+import { uploadProjectDocuments } from './document-actions';
 
 /**
- * PRD সেকশন ৫.৪ ও ৫.৫ — সেলের কাগজপত্র আপলোড (Admin/Accounts)।
+ * PRD সেকশন ৫.৭ ও ৫.৮ — প্রজেক্টের কাগজপত্র আপলোড (Admin/Accounts)।
  *
  * লিড ডকুমেন্ট ফর্মের (`app/sales/leads/[id]/document-upload-form.tsx`) মতোই
  * drag & drop + একসাথে একাধিক ফাইল; ধরন ও বিবরণ পুরো ব্যাচের জন্য প্রযোজ্য
  * (একই ধরনের কয়েক পাতা একবারে দেওয়াই স্বাভাবিক)।
  */
-export function SaleDocumentUploadForm({ saleId }: { saleId: string }) {
+export function ProjectDocumentUploadForm({ projectId }: { projectId: string }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -73,13 +73,13 @@ export function SaleDocumentUploadForm({ saleId }: { saleId: string }) {
 
     const form = new FormData(event.currentTarget);
     const fields = {
-      saleId,
+      projectId,
       type: String(form.get('type') ?? ''),
       description: String(form.get('description') ?? ''),
     };
 
     // ফাইলগুলো তোলার আগেই মেটাডেটা যাচাই — কয়েক MB পাঠানোর পর ফর্ম ভুল বলাটা অপচয়
-    const check = validate(uploadSaleDocumentSchema, fields);
+    const check = validate(uploadProjectDocumentSchema, fields);
     if (!check.ok) {
       setError(Object.values(check.fieldErrors)[0] ?? check.message);
       toast.error(check.message);
@@ -96,7 +96,7 @@ export function SaleDocumentUploadForm({ saleId }: { saleId: string }) {
     }
 
     setPending(true);
-    const result = await uploadSaleDocuments(payload);
+    const result = await uploadProjectDocuments(payload);
     setPending(false);
 
     if (!result.ok) {
@@ -186,8 +186,8 @@ export function SaleDocumentUploadForm({ saleId }: { saleId: string }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="sale-doc-type">ডকুমেন্টের ধরন</Label>
-          <NativeSelect id="sale-doc-type" name="type" defaultValue="Booking Form">
+          <Label htmlFor="project-doc-type">ডকুমেন্টের ধরন</Label>
+          <NativeSelect id="project-doc-type" name="type" defaultValue="Contract">
             {DOCUMENT_TYPES.map((type) => (
               <option key={type} value={type}>
                 {DOCUMENT_TYPE_LABEL[type]}
@@ -197,9 +197,9 @@ export function SaleDocumentUploadForm({ saleId }: { saleId: string }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="sale-doc-description">বিবরণ (ঐচ্ছিক)</Label>
+          <Label htmlFor="project-doc-description">বিবরণ (ঐচ্ছিক)</Label>
           <Input
-            id="sale-doc-description"
+            id="project-doc-description"
             name="description"
             placeholder="যেমন: স্বাক্ষরিত কপি, ৩ পাতা"
             autoComplete="off"

@@ -7,9 +7,10 @@ import {
   startOfQuarter,
   subMonths,
 } from 'date-fns';
-import { LeadStage, type LeadSource, type Prisma } from '@prisma/client';
+import { LeadStage, LedgerType, type LeadSource, type Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
+  buildingTypeLabel,
   LEAD_SOURCES,
   LEAD_STAGES,
   lostReasonLabel,
@@ -19,7 +20,8 @@ import {
 } from '@/lib/leads';
 import { AGING_BUCKET_LABEL, PAYMENT_METHOD_LABEL } from '@/lib/payments';
 import { loadAgingReport } from '@/lib/payment-data';
-import { UNIT_STATUS_LABEL } from '@/lib/sales';
+import { LEDGER_CATEGORY_LABEL, LEDGER_TYPE_SHORT } from '@/lib/ledger';
+import { PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { computePhaseStatus, overallProgress, summarizePhases } from '@/lib/phases';
 import {
   ratio,
@@ -34,7 +36,7 @@ import {
 } from '@/lib/reports';
 
 /**
- * Admin ড্যাশবোর্ডের তিনটি চার্টের ডেটা — PRD সেকশন ৫.৭।
+ * Admin ড্যাশবোর্ডের তিনটি চার্টের ডেটা — PRD সেকশন ৫.১০।
  * সবই আসল DB কুয়েরি (groupBy/aggregate); কোথাও স্যাম্পল ডেটা বসানো নেই।
  *
  * এটি server-only (`lib/prisma` import করে); বিশুদ্ধ টাইপ, রঙ ও ফরম্যাটিং
@@ -79,9 +81,20 @@ function stageFromMeta(metadata: Prisma.JsonValue | null, field: 'from' | 'to'):
  * এর STAGE_CHANGED রেকর্ড থেকে বের করে সেই পর্যন্ত গোনা হয়; ইতিহাস না থাকলে
  * (সরাসরি Lost হিসেবে তৈরি) New ধরা হয়।
  */
-export async function loadSalesFunnel(range: FunnelRange, now: Date): Promise<FunnelReport> {
+export async function loadSalesFunnel(
+  range: FunnelRange,
+  now: Date,
+  /**
+   * বাড়তি ফিল্টার — সেলস প্যানেলের "পারফরম্যান্স" পাতায় একজন এক্সিকিউটিভের
+   * নিজের ফানেল দেখাতে `{ assignedToId }` পাঠানো হয়। খালি হলে পুরো কোম্পানির।
+   */
+  scope: Prisma.LeadWhereInput = {},
+): Promise<FunnelReport> {
   const start = funnelRangeStart(range, now);
-  const where: Prisma.LeadWhereInput = start ? { createdAt: { gte: start } } : {};
+  const where: Prisma.LeadWhereInput = {
+    ...scope,
+    ...(start ? { createdAt: { gte: start } } : {}),
+  };
 
   const grouped = await prisma.lead.groupBy({
     by: ['stage'],
@@ -173,57 +186,39 @@ async function lostLeadsByReachedStage(
 const MAX_PROJECTS_IN_CHART = 12;
 
 /**
- * PRD সেকশন ৫.৭ — প্রতিটি active প্রজেক্টের ইউনিটগুলোর গড় % complete।
+ * PRD সেকশন ৫.১০ — প্রতিটি active প্রজেক্টের ফেজ-ভিত্তিক % complete।
  *
- * প্রতিটি ইউনিটের অগ্রগতি `overallProgress` দিয়ে হিসাব হয় (ফেজের planned
- * duration ধরে ভারিত গড়) — ইঞ্জিনিয়ার/কাস্টমার প্যানেলে ইউনিটের পাতায় যে
+ * প্রতিটি প্রজেক্টের অগ্রগতি `overallProgress` দিয়ে হিসাব হয় (ফেজের planned
+ * duration ধরে ভারিত গড়) — ইঞ্জিনিয়ার/কাস্টমার প্যানেলে প্রজেক্টের পাতায় যে
  * সংখ্যাটা দেখা যায়, ড্যাশবোর্ডেও ঠিক সেটিই। সরল `_avg(percentComplete)` নিলে
  * ৯ মাসের Structure আর ৩ সপ্তাহের Handover সমান ওজন পেত, আর দুই জায়গার সংখ্যা
  * মিলত না।
  *
- * "active" = অন্তত একটি ইউনিটে ফেজ টাইমলাইন বসানো আছে। টাইমলাইন ছাড়া প্রজেক্টের
+ * "active" = প্রজেক্টে ফেজ টাইমলাইন বসানো আছে। টাইমলাইন ছাড়া প্রজেক্টের
  * অগ্রগতি মাপার কিছু নেই, তাই সেগুলো চার্টে আসে না।
  */
 export async function loadProjectProgress(now: Date): Promise<ProjectProgressRow[]> {
   const projects = await prisma.project.findMany({
-    where: { units: { some: { phases: { some: {} } } } },
+    where: { phases: { some: {} } },
     select: {
       id: true,
-      name: true,
-      units: {
-        select: {
-          id: true,
-          phases: {
-            select: { percentComplete: true, plannedStart: true, plannedEnd: true },
-            orderBy: { order: 'asc' },
-          },
-        },
+      title: true,
+      phases: {
+        select: { percentComplete: true, plannedStart: true, plannedEnd: true },
+        orderBy: { order: 'asc' },
       },
     },
   });
 
-  const rows = projects.map((project) => {
-    const units = project.units.filter((unit) => unit.phases.length > 0);
-    const progressPerUnit = units.map((unit) => overallProgress(unit.phases));
-
-    const delayedPhases = units.reduce(
-      (sum, unit) =>
-        sum + unit.phases.filter((phase) => computePhaseStatus(phase, now) === 'DELAYED').length,
-      0,
-    );
-
-    return {
-      projectId: project.id,
-      name: project.name,
-      progress:
-        progressPerUnit.length > 0
-          ? Math.round(progressPerUnit.reduce((a, b) => a + b, 0) / progressPerUnit.length)
-          : 0,
-      unitCount: units.length,
-      doneUnits: progressPerUnit.filter((p) => p >= 100).length,
-      delayedPhases,
-    } satisfies ProjectProgressRow;
-  });
+  const rows = projects.map((project) => ({
+    projectId: project.id,
+    name: project.title,
+    progress: overallProgress(project.phases),
+    phaseCount: project.phases.length,
+    donePhases: project.phases.filter((phase) => phase.percentComplete >= 100).length,
+    delayedPhases: project.phases.filter((phase) => computePhaseStatus(phase, now) === 'DELAYED')
+      .length,
+  })) satisfies ProjectProgressRow[];
 
   // কম এগোনো প্রজেক্ট আগে — ড্যাশবোর্ডে চোখ আগে সেখানেই পড়া উচিত
   return rows.sort((a, b) => a.progress - b.progress).slice(0, MAX_PROJECTS_IN_CHART);
@@ -308,18 +303,19 @@ export type DashboardStats = {
   activeUsers: number;
   leads: number;
   projects: number;
-  units: number;
+  /** এখনো Won হয়নি এমন খোলা লিড — প্রি-প্রজেক্ট পাইপলাইনে যতগুলো আছে */
+  openLeads: number;
   /** আজ পর্যন্ত ফলো-আপের তারিখ পেরিয়ে যাওয়া খোলা লিড */
   overdueFollowUps: number;
 };
 
 /** ড্যাশবোর্ডের উপরের কার্ডগুলোর সংখ্যা */
 export async function loadDashboardStats(now: Date): Promise<DashboardStats> {
-  const [activeUsers, leads, projects, units, overdueFollowUps] = await Promise.all([
+  const [activeUsers, leads, projects, openLeads, overdueFollowUps] = await Promise.all([
     prisma.user.count({ where: { active: true } }),
     prisma.lead.count(),
     prisma.project.count(),
-    prisma.unit.count(),
+    prisma.lead.count({ where: { stage: { notIn: [LeadStage.WON, LeadStage.LOST] } } }),
     prisma.lead.count({
       where: {
         nextFollowUpAt: { lt: startOfDay(now) },
@@ -328,7 +324,7 @@ export async function loadDashboardStats(now: Date): Promise<DashboardStats> {
     }),
   ]);
 
-  return { activeUsers, leads, projects, units, overdueFollowUps };
+  return { activeUsers, leads, projects, openLeads, overdueFollowUps };
 }
 
 /* ---------------------------------------------------- export datasets */
@@ -355,11 +351,15 @@ export async function loadReportDataset(
     case 'leads':
       return leadsDataset(range);
     case 'project-progress':
-      return unitProgressDataset(now);
+      return projectProgressDataset(now);
     case 'collection':
       return collectionDataset(now);
     case 'overdue-aging':
       return overdueAgingDataset(now);
+    case 'client-profitability':
+      return clientProfitabilityDataset();
+    case 'company-ledger':
+      return companyLedgerDataset(range, now);
     case 'payments':
       return paymentsDataset(range, now);
   }
@@ -391,7 +391,7 @@ async function salesFunnelDataset(range: FunnelRange, now: Date): Promise<Report
 
 /* ------------------------------------------- executive / source rollup */
 
-/** দুই রোলআপেই একই কুয়েরি লাগে — লিড + (থাকলে) তার সেলের মূল্য */
+/** দুই রোলআপেই একই কুয়েরি লাগে — লিড + (থাকলে) তার প্রজেক্টের কন্ট্রাক্ট ভ্যালু */
 async function leadRollupRows(range: FunnelRange, now: Date) {
   return prisma.lead.findMany({
     where: { createdAt: rangeFilter(range, now) },
@@ -399,7 +399,7 @@ async function leadRollupRows(range: FunnelRange, now: Date) {
       stage: true,
       source: true,
       assignedTo: { select: { id: true, name: true } },
-      sale: { select: { totalAmount: true } },
+      project: { select: { totalContractValue: true } },
     },
   });
 }
@@ -408,11 +408,14 @@ type Rollup = { total: number; won: number; lost: number; value: number };
 
 const emptyRollup = (): Rollup => ({ total: 0, won: 0, lost: 0, value: 0 });
 
-function addToRollup(bucket: Rollup, lead: { stage: LeadStage; sale: { totalAmount: unknown } | null }) {
+function addToRollup(
+  bucket: Rollup,
+  lead: { stage: LeadStage; project: { totalContractValue: unknown } | null },
+) {
   bucket.total += 1;
   if (lead.stage === LeadStage.WON) {
     bucket.won += 1;
-    bucket.value += Number(lead.sale?.totalAmount ?? 0);
+    bucket.value += Number(lead.project?.totalContractValue ?? 0);
   } else if (lead.stage === LeadStage.LOST) {
     bucket.lost += 1;
   }
@@ -518,8 +521,9 @@ async function leadsDataset(range: FunnelRange): Promise<ReportDataset> {
       localContactName: true,
       localContactPhone: true,
       localContactRelation: true,
+      landSize: true,
+      buildingType: true,
       assignedTo: { select: { name: true } },
-      interestedUnit: { select: { unitNo: true, project: { select: { name: true } } } },
     },
   });
 
@@ -533,7 +537,8 @@ async function leadsDataset(range: FunnelRange): Promise<ReportDataset> {
       { header: 'স্টেজ' },
       { header: 'Lost কারণ' },
       { header: 'অ্যাসাইন' },
-      { header: 'আগ্রহী ইউনিট' },
+      { header: 'জমির আয়তন' },
+      { header: 'বাড়ির ধরন' },
       { header: 'জমি/প্রজেক্ট এলাকা' },
       { header: 'বাজেট (কম) ৳', kind: 'money' },
       { header: 'বাজেট (বেশি) ৳', kind: 'money' },
@@ -552,9 +557,8 @@ async function leadsDataset(range: FunnelRange): Promise<ReportDataset> {
       STAGE_LABEL[lead.stage],
       lostReasonLabel(lead.lostReason),
       lead.assignedTo?.name ?? null,
-      lead.interestedUnit
-        ? `${lead.interestedUnit.project.name} — ${lead.interestedUnit.unitNo}`
-        : null,
+      lead.landSize,
+      buildingTypeLabel(lead.buildingType),
       lead.projectLocation,
       lead.budgetMin === null ? null : Number(lead.budgetMin),
       lead.budgetMax === null ? null : Number(lead.budgetMax),
@@ -567,20 +571,24 @@ async function leadsDataset(range: FunnelRange): Promise<ReportDataset> {
   };
 }
 
-/* ---------------------------------------------------- unit progress */
+/* -------------------------------------------------- project progress */
 
 /**
- * ইউনিট-ভিত্তিক অগ্রগতি — ড্যাশবোর্ডের চার্ট প্রজেক্ট-গড় দেখায়, কিন্তু
- * এক্সপোর্টে ইউনিট ধরে ধরে দরকার হয় (কোন ফ্ল্যাটে কাজ আটকে আছে)।
+ * প্রজেক্ট-ভিত্তিক অগ্রগতি — ড্যাশবোর্ডের চার্ট শুধু % দেখায়, কিন্তু এক্সপোর্টে
+ * ক্লায়েন্ট/ইঞ্জিনিয়ার/চলমান ফেজ ধরে ধরে দরকার হয় (কোন সাইটে কাজ আটকে আছে)।
  */
-async function unitProgressDataset(now: Date): Promise<ReportDataset> {
-  const units = await prisma.unit.findMany({
+async function projectProgressDataset(now: Date): Promise<ReportDataset> {
+  const projects = await prisma.project.findMany({
     where: { phases: { some: {} } },
-    orderBy: [{ project: { name: 'asc' } }, { unitNo: 'asc' }],
+    orderBy: { createdAt: 'desc' },
     select: {
-      unitNo: true,
+      title: true,
+      landLocation: true,
+      buildingType: true,
+      floors: true,
       status: true,
-      project: { select: { name: true, location: true, engineer: { select: { name: true } } } },
+      customer: { select: { user: { select: { name: true } } } },
+      engineer: { select: { name: true } },
       phases: {
         select: {
           name: true,
@@ -597,9 +605,11 @@ async function unitProgressDataset(now: Date): Promise<ReportDataset> {
   return {
     columns: [
       { header: 'প্রজেক্ট' },
-      { header: 'এলাকা' },
-      { header: 'ইউনিট' },
-      { header: 'ইউনিট স্ট্যাটাস' },
+      { header: 'ক্লায়েন্ট' },
+      { header: 'জমির অবস্থান' },
+      { header: 'বাড়ির ধরন' },
+      { header: 'তলা', kind: 'number' },
+      { header: 'স্ট্যাটাস' },
       { header: 'ইঞ্জিনিয়ার' },
       { header: 'অগ্রগতি (%)', kind: 'percent' },
       { header: 'মোট ফেজ', kind: 'number' },
@@ -608,15 +618,17 @@ async function unitProgressDataset(now: Date): Promise<ReportDataset> {
       { header: 'চলমান ফেজ' },
       { header: 'পরিকল্পিত শেষ' },
     ],
-    rows: units.map((unit) => {
-      const summary = summarizePhases(unit.phases, now);
-      const last = unit.phases[unit.phases.length - 1];
+    rows: projects.map((project) => {
+      const summary = summarizePhases(project.phases, now);
+      const last = project.phases[project.phases.length - 1];
       return [
-        unit.project.name,
-        unit.project.location,
-        unit.unitNo,
-        UNIT_STATUS_LABEL[unit.status],
-        unit.project.engineer?.name ?? null,
+        project.title,
+        project.customer.user.name,
+        project.landLocation,
+        buildingTypeLabel(project.buildingType),
+        project.floors,
+        PROJECT_STATUS_LABEL[project.status],
+        project.engineer?.name ?? null,
         summary.progress,
         summary.total,
         summary.doneCount,
@@ -650,7 +662,7 @@ async function overdueAgingDataset(now: Date): Promise<ReportDataset> {
     columns: [
       { header: 'কাস্টমার' },
       { header: 'ফোন' },
-      { header: 'ইউনিট' },
+      { header: 'প্রজেক্ট' },
       { header: 'কিস্তি' },
       { header: 'শেষ তারিখ' },
       { header: 'কত দিন বকেয়া', kind: 'number' },
@@ -662,7 +674,7 @@ async function overdueAgingDataset(now: Date): Promise<ReportDataset> {
     rows: report.rows.map((row) => [
       row.customerName,
       row.customerPhone,
-      row.unitLabel,
+      row.projectTitle,
       row.label,
       row.dueDateLabel,
       row.overdueDays,
@@ -691,10 +703,10 @@ async function paymentsDataset(range: FunnelRange, now: Date): Promise<ReportDat
           dueDate: true,
           paymentPlan: {
             select: {
-              sale: {
+              project: {
                 select: {
+                  title: true,
                   customer: { select: { user: { select: { name: true, phone: true } } } },
-                  unit: { select: { unitNo: true, project: { select: { name: true } } } },
                 },
               },
             },
@@ -710,7 +722,7 @@ async function paymentsDataset(range: FunnelRange, now: Date): Promise<ReportDat
       { header: 'তারিখ' },
       { header: 'কাস্টমার' },
       { header: 'ফোন' },
-      { header: 'ইউনিট' },
+      { header: 'প্রজেক্ট' },
       { header: 'কিস্তি' },
       { header: 'কিস্তির শেষ তারিখ' },
       { header: 'জমা (৳)', kind: 'money' },
@@ -719,13 +731,13 @@ async function paymentsDataset(range: FunnelRange, now: Date): Promise<ReportDat
       { header: 'গ্রহণকারী' },
     ],
     rows: payments.map((payment) => {
-      const sale = payment.installment.paymentPlan.sale;
+      const project = payment.installment.paymentPlan.project;
       return [
         payment.receiptNo,
         dateLabel(payment.paidAt),
-        sale.customer.user.name,
-        sale.customer.user.phone,
-        `${sale.unit.project.name} — ${sale.unit.unitNo}`,
+        project.customer.user.name,
+        project.customer.user.phone,
+        project.title,
         payment.installment.label,
         dateLabel(payment.installment.dueDate),
         Number(payment.amountReceived),
@@ -734,5 +746,121 @@ async function paymentsDataset(range: FunnelRange, now: Date): Promise<ReportDat
         payment.receivedBy.name,
       ];
     }),
+  };
+}
+
+/* ------------------------------------------- client profit / company ledger */
+
+/**
+ * PRD সেকশন ৫.১০ — "Client-wise profitability report (billed − cost = margin)"।
+ *
+ * `billed` = ক্লায়েন্টকে দেওয়া সব বিল: pre-project LedgerEntry (INCOME) + কনস্ট্রাকশন
+ * কিস্তির মোট। `cost` = সেই ক্লায়েন্টের বিপরীতে Orion এর ইন্টারনাল খরচ (EXPENSE)।
+ * রিপোর্টটি শুধু `report:financial` ওয়ালারা নামাতে পারেন — কাস্টমার কখনো নয়।
+ */
+async function clientProfitabilityDataset(): Promise<ReportDataset> {
+  const leads = await prisma.lead.findMany({
+    where: { ledgerEntries: { some: {} } },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      name: true,
+      phone: true,
+      stage: true,
+      ledgerEntries: { select: { type: true, amount: true } },
+      project: {
+        select: {
+          title: true,
+          totalContractValue: true,
+          paymentPlan: {
+            select: { installments: { select: { payments: { select: { amountReceived: true } } } } },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    columns: [
+      { header: 'ক্লায়েন্ট' },
+      { header: 'ফোন' },
+      { header: 'স্টেজ' },
+      { header: 'প্রজেক্ট' },
+      { header: 'কন্ট্রাক্ট ভ্যালু (৳)', kind: 'money' },
+      { header: 'প্রি-প্রজেক্ট বিল (৳)', kind: 'money' },
+      { header: 'কনস্ট্রাকশন আদায় (৳)', kind: 'money' },
+      { header: 'ইন্টারনাল কস্ট (৳)', kind: 'money' },
+      { header: 'নিট (৳)', kind: 'money' },
+    ],
+    rows: leads.map((lead) => {
+      const billed = lead.ledgerEntries
+        .filter((entry) => entry.type === LedgerType.INCOME)
+        .reduce((sum, entry) => sum + Number(entry.amount), 0);
+      const cost = lead.ledgerEntries
+        .filter((entry) => entry.type === LedgerType.EXPENSE)
+        .reduce((sum, entry) => sum + Number(entry.amount), 0);
+      const collected = (lead.project?.paymentPlan?.installments ?? []).reduce(
+        (sum, installment) =>
+          sum + installment.payments.reduce((s, p) => s + Number(p.amountReceived), 0),
+        0,
+      );
+
+      return [
+        lead.name,
+        lead.phone,
+        STAGE_LABEL[lead.stage],
+        lead.project?.title ?? null,
+        lead.project === null ? null : Number(lead.project.totalContractValue),
+        billed,
+        collected,
+        cost,
+        billed + collected - cost,
+      ];
+    }),
+  };
+}
+
+/** PRD সেকশন ৫.৬ — Main Company Ledger এর কাঁচা এন্ট্রি তালিকা */
+async function companyLedgerDataset(range: FunnelRange, now: Date): Promise<ReportDataset> {
+  const entries = await prisma.ledgerEntry.findMany({
+    where: { date: rangeFilter(range, now) },
+    orderBy: { date: 'desc' },
+    select: {
+      date: true,
+      type: true,
+      category: true,
+      amount: true,
+      note: true,
+      receiptNo: true,
+      clientVisible: true,
+      lead: { select: { name: true, phone: true } },
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  return {
+    columns: [
+      { header: 'তারিখ' },
+      { header: 'ধরন' },
+      { header: 'ক্যাটেগরি' },
+      { header: 'ক্লায়েন্ট' },
+      { header: 'ফোন' },
+      { header: 'অঙ্ক (৳)', kind: 'money' },
+      { header: 'রসিদ নং' },
+      { header: 'ক্লায়েন্ট দেখতে পান' },
+      { header: 'নোট' },
+      { header: 'এন্ট্রি করেছেন' },
+    ],
+    rows: entries.map((entry) => [
+      dateLabel(entry.date),
+      LEDGER_TYPE_SHORT[entry.type],
+      LEDGER_CATEGORY_LABEL[entry.category],
+      entry.lead?.name ?? '(কোম্পানি — ক্লায়েন্ট ছাড়া)',
+      entry.lead?.phone ?? null,
+      Number(entry.amount),
+      entry.receiptNo,
+      entry.clientVisible ? 'হ্যাঁ' : 'না',
+      entry.note,
+      entry.createdBy.name,
+    ]),
   };
 }

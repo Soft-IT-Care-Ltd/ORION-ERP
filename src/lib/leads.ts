@@ -1,4 +1,10 @@
-import type { LeadActivityType, LeadFileType, LeadSource, LeadStage } from '@prisma/client';
+import type {
+  BuildingType,
+  LeadActivityType,
+  LeadFileType,
+  LeadSource,
+  LeadStage,
+} from '@prisma/client';
 
 /**
  * Lead pipeline এর কনস্ট্যান্ট ও লেবেল — PRD সেকশন ৫.১।
@@ -7,56 +13,105 @@ import type { LeadActivityType, LeadFileType, LeadSource, LeadStage } from '@pri
  * শুধু type-only Prisma import (runtime এ `@prisma/client` bundle হবে না)।
  */
 
-/** বোর্ডে কলামগুলো ঠিক এই ক্রমেই দেখাবে — PRD এর funnel অর্ডার */
+/** বোর্ডে কলামগুলো ঠিক এই ক্রমেই দেখাবে — PRD সেকশন ৫.১ এর কনস্ট্রাকশন funnel */
 export const LEAD_STAGES = [
-  'NEW',
-  'CONTACTED',
+  'INQUIRY',
+  'DISCUSSION',
   'SITE_VISIT_SCHEDULED',
   'SITE_VISIT_DONE',
+  'DIGITAL_SURVEY',
+  'SOIL_TEST',
+  'DESIGN_IN_PROGRESS',
+  'DESIGN_APPROVED',
+  'QUOTATION_SENT',
+  'GOVT_APPROVAL',
   'NEGOTIATION',
-  'BOOKING',
-  'SALE_AGREEMENT_SIGNED',
   'WON',
   'LOST',
 ] as const satisfies readonly LeadStage[];
 
 export const STAGE_LABEL: Record<LeadStage, string> = {
-  NEW: 'নতুন লিড',
-  CONTACTED: 'যোগাযোগ হয়েছে',
+  INQUIRY: 'ইনকোয়ারি',
+  DISCUSSION: 'আলোচনা চলছে',
   SITE_VISIT_SCHEDULED: 'সাইট ভিজিট নির্ধারিত',
   SITE_VISIT_DONE: 'সাইট ভিজিট সম্পন্ন',
+  DIGITAL_SURVEY: 'ডিজিটাল সার্ভে',
+  SOIL_TEST: 'সয়েল টেস্ট',
+  DESIGN_IN_PROGRESS: 'ডিজাইন চলছে',
+  DESIGN_APPROVED: 'ডিজাইন অনুমোদিত',
+  QUOTATION_SENT: 'কোটেশন পাঠানো হয়েছে',
+  GOVT_APPROVAL: 'সরকারি অনুমোদন',
   NEGOTIATION: 'দরদাম',
-  BOOKING: 'বুকিং (অ্যাডভান্স)',
-  SALE_AGREEMENT_SIGNED: 'চুক্তি স্বাক্ষরিত',
   WON: 'Won (কনভার্টেড)',
   LOST: 'Lost',
 };
 
 /** ইংরেজি short label — chart axis / টুলটিপে ব্যবহারের জন্য */
 export const STAGE_LABEL_EN: Record<LeadStage, string> = {
-  NEW: 'New Lead',
-  CONTACTED: 'Contacted',
+  INQUIRY: 'Inquiry',
+  DISCUSSION: 'Discussion',
   SITE_VISIT_SCHEDULED: 'Site Visit Scheduled',
   SITE_VISIT_DONE: 'Site Visit Done',
+  DIGITAL_SURVEY: 'Digital Survey',
+  SOIL_TEST: 'Soil Test',
+  DESIGN_IN_PROGRESS: 'Design In Progress',
+  DESIGN_APPROVED: 'Design Approved',
+  QUOTATION_SENT: 'Quotation Sent',
+  GOVT_APPROVAL: 'Govt Approval',
   NEGOTIATION: 'Negotiation',
-  BOOKING: 'Booking',
-  SALE_AGREEMENT_SIGNED: 'Sale Agreement Signed',
   WON: 'Won',
   LOST: 'Lost',
 };
 
+/**
+ * PRD সেকশন ৫.১ এর নোট — সব লিডে সব ধাপ লাগে না। ছোট জমিতে ডিজিটাল সার্ভে,
+ * এক-তলা বাড়িতে সয়েল টেস্ট বাদ যেতে পারে। বোর্ডে কলামগুলো থাকে, কিন্তু
+ * হেডারে "শুধু প্রয়োজন হলে" ব্যাজ দেখিয়ে বোঝানো হয় যে skip করা যাবে।
+ */
+export const CONDITIONAL_STAGES = ['DIGITAL_SURVEY', 'SOIL_TEST'] as const satisfies
+  readonly LeadStage[];
+
+export function isConditionalStage(stage: LeadStage): boolean {
+  return (CONDITIONAL_STAGES as readonly LeadStage[]).includes(stage);
+}
+
+export const CONDITIONAL_STAGE_HINT = 'শুধু প্রয়োজন হলে';
+
 /** কলাম হেডারের accent — Won সবুজ, Lost লাল, বাকিগুলো ব্র্যান্ড navy→gold */
 export const STAGE_ACCENT: Record<LeadStage, string> = {
-  NEW: 'bg-slate-400',
-  CONTACTED: 'bg-sky-500',
+  INQUIRY: 'bg-slate-400',
+  DISCUSSION: 'bg-sky-500',
   SITE_VISIT_SCHEDULED: 'bg-indigo-500',
   SITE_VISIT_DONE: 'bg-violet-500',
+  DIGITAL_SURVEY: 'bg-cyan-500',
+  SOIL_TEST: 'bg-orange-500',
+  DESIGN_IN_PROGRESS: 'bg-fuchsia-500',
+  DESIGN_APPROVED: 'bg-purple-600',
+  QUOTATION_SENT: 'bg-orion-gold',
+  GOVT_APPROVAL: 'bg-teal-500',
   NEGOTIATION: 'bg-amber-500',
-  BOOKING: 'bg-orion-gold',
-  SALE_AGREEMENT_SIGNED: 'bg-teal-500',
   WON: 'bg-emerald-600',
   LOST: 'bg-destructive',
 };
+
+/* ------------------------------------------------------------ building */
+
+/** PRD সেকশন ৫.১ — ক্লায়েন্ট যে ধরনের বাড়ি বানাতে চান */
+export const BUILDING_TYPE_LABEL: Record<BuildingType, string> = {
+  DUPLEX: 'ডুপ্লেক্স',
+  ONE_STORY: '১-তলা',
+  TWO_STORY: '২-তলা',
+  THREE_STORY: '৩-তলা',
+  FOUR_STORY: '৪-তলা',
+  FIVE_PLUS_STORY: '৫+ তলা',
+  OTHER: 'অন্যান্য',
+};
+
+export const BUILDING_TYPES = Object.keys(BUILDING_TYPE_LABEL) as BuildingType[];
+
+export function buildingTypeLabel(type: BuildingType | null | undefined): string | null {
+  return type ? BUILDING_TYPE_LABEL[type] : null;
+}
 
 export const SOURCE_LABEL: Record<LeadSource, string> = {
   FACEBOOK_ADS: 'ফেসবুক অ্যাডস',

@@ -1,104 +1,116 @@
 import { format } from 'date-fns';
-import type { SaleStatus } from '@prisma/client';
+import type { BuildingType, ProjectStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { loadSalePlan, type SalePlan } from '@/lib/payment-data';
-import { loadUnitTimeline, type UnitTimeline } from '@/lib/phase-data';
+import { loadProjectPlan, type ProjectPlan } from '@/lib/payment-data';
+import { loadProjectTimeline, type ProjectTimeline } from '@/lib/phase-data';
+import { loadClientVisibleEntries, type LedgerEntryView } from '@/lib/ledger-data';
 import { paymentHistory, type PaymentHistoryItem } from '@/lib/payments';
-import { loadSaleDocuments } from '@/lib/document-data';
+import { loadProjectDocuments } from '@/lib/document-data';
 import { groupDocuments, type DocumentGroup, type DocumentItem } from '@/lib/documents';
+import { isEmbeddableStreamUrl } from '@/lib/projects';
 import { formatBDT } from '@/lib/utils';
 
 /**
- * কাস্টমার পোর্টালের ডেটা — PRD সেকশন ৫.৪।
+ * কাস্টমার পোর্টালের ডেটা — PRD সেকশন ৫.৭।
  *
  * পোর্টালের চারটি পাতা (ড্যাশবোর্ড, অগ্রগতি, পেমেন্ট, ডকুমেন্ট) একই কাস্টমারের
- * একই সেল/ইউনিট নিয়ে কাজ করে, তাই কুয়েরিগুলো এক জায়গায় (`lib/phase-data.ts` ও
+ * একই প্রজেক্ট নিয়ে কাজ করে, তাই কুয়েরিগুলো এক জায়গায় (`lib/phase-data.ts` ও
  * `lib/payment-data.ts` এর মতোই)।
  *
  * **স্কোপ:** প্রতিটি কুয়েরি `customer.userId` দিয়েই শুরু হয় — লগইন করা ইউজারের
  * নিজের রেকর্ড ছাড়া অন্য কিছু কখনো ফেরত আসে না (PRD সেকশন ৪)। এটি server-only।
+ *
+ * **নিরাপত্তা নীতি:** এখান থেকে কোনো internal cost/expense কখনো বের হয় না —
+ * `loadClientVisibleEntries` DB লেভেলেই `type=INCOME` ও `clientVisible=true`
+ * দুটোই চায় (PRD সেকশন ৪ ও ৫.৭)।
  */
 
-export type CustomerUnit = {
-  saleId: string;
-  unitId: string;
-  status: SaleStatus;
-  projectName: string;
-  projectLocation: string;
-  unitNo: string;
-  /** "Orion Green — A-4" */
-  label: string;
-  sizeSqft: number | null;
-  /** সেল/বুকিংয়ের তারিখ — server এ ফরম্যাট করা (TZ-নিরপেক্ষ রাখতে) */
-  bookingDateLabel: string;
-  totalAmount: number;
+export type CustomerProject = {
+  projectId: string;
+  title: string;
+  landLocation: string | null;
+  buildingType: BuildingType | null;
+  floors: number | null;
+  totalSqft: number | null;
+  status: ProjectStatus;
+  /** নির্মাণ শুরুর তারিখ — server এ ফরম্যাট করা (TZ-নিরপেক্ষ রাখতে) */
+  startDateLabel: string | null;
+  totalContractValue: number;
+  /** লাইভ CC ক্যামেরা — শুধু বৈধ http/https হলে (PRD সেকশন ৫.৪) */
+  cameraStreamUrl: string | null;
 };
 
-const saleSelect = {
+const projectSelect = {
   id: true,
+  title: true,
+  landLocation: true,
+  buildingType: true,
+  floors: true,
+  totalSqft: true,
   status: true,
-  saleDate: true,
-  totalAmount: true,
-  unit: {
-    select: {
-      id: true,
-      unitNo: true,
-      sizeSqft: true,
-      project: { select: { name: true, location: true } },
-    },
-  },
+  startDate: true,
+  createdAt: true,
+  totalContractValue: true,
+  cameraStreamUrl: true,
+  leadId: true,
 } as const;
 
-type SaleRow = {
+type ProjectRow = {
   id: string;
-  status: SaleStatus;
-  saleDate: Date;
-  totalAmount: { toString(): string };
-  unit: {
-    id: string;
-    unitNo: string;
-    sizeSqft: { toString(): string } | null;
-    project: { name: string; location: string };
-  };
+  title: string;
+  landLocation: string | null;
+  buildingType: BuildingType | null;
+  floors: number | null;
+  totalSqft: { toString(): string } | null;
+  status: ProjectStatus;
+  startDate: Date | null;
+  createdAt: Date;
+  totalContractValue: { toString(): string };
+  cameraStreamUrl: string | null;
+  leadId: string;
 };
 
-function toCustomerUnit(sale: SaleRow): CustomerUnit {
+function toCustomerProject(project: ProjectRow): CustomerProject {
   return {
-    saleId: sale.id,
-    unitId: sale.unit.id,
-    status: sale.status,
-    projectName: sale.unit.project.name,
-    projectLocation: sale.unit.project.location,
-    unitNo: sale.unit.unitNo,
-    label: `${sale.unit.project.name} — ${sale.unit.unitNo}`,
-    sizeSqft: sale.unit.sizeSqft === null ? null : Number(sale.unit.sizeSqft),
-    bookingDateLabel: format(sale.saleDate, 'dd MMM yyyy'),
-    totalAmount: Number(sale.totalAmount),
+    projectId: project.id,
+    title: project.title,
+    landLocation: project.landLocation,
+    buildingType: project.buildingType,
+    floors: project.floors,
+    totalSqft: project.totalSqft === null ? null : Number(project.totalSqft),
+    status: project.status,
+    startDateLabel: project.startDate ? format(project.startDate, 'dd MMM yyyy') : null,
+    totalContractValue: Number(project.totalContractValue),
+    // অ্যাডমিন ভুল স্কিমের লিংক বসিয়ে দিলে সেটি iframe এ যাবে না
+    cameraStreamUrl: isEmbeddableStreamUrl(project.cameraStreamUrl)
+      ? project.cameraStreamUrl
+      : null,
   };
 }
 
-/** লগইন করা কাস্টমারের ইউনিটগুলো — নতুন সেল আগে */
-export async function loadCustomerUnits(userId: string): Promise<CustomerUnit[]> {
+/** লগইন করা কাস্টমারের প্রজেক্ট — নতুনটি আগে */
+export async function loadCustomerProjects(userId: string): Promise<CustomerProject[]> {
   const customer = await prisma.customer.findUnique({
     where: { userId },
-    select: { sales: { select: saleSelect, orderBy: { saleDate: 'desc' } } },
+    select: { projects: { select: projectSelect, orderBy: { createdAt: 'desc' } } },
   });
 
-  return (customer?.sales ?? []).map(toCustomerUnit);
+  return (customer?.projects ?? []).map(toCustomerProject);
 }
 
 /* ------------------------------------------------------------ documents */
 
 /**
- * এক ইউনিটের ডকুমেন্ট তালিকা — আপলোড করা কাগজ + সিস্টেমে তৈরি পেমেন্ট রসিদ।
+ * এক প্রজেক্টের ডকুমেন্ট তালিকা — আপলোড করা কাগজ + সিস্টেমে তৈরি পেমেন্ট রসিদ।
  *
  * রসিদগুলো `Document` রো নয় (সেগুলো `Payment` থেকে তৈরি প্রিন্ট পেজ), কিন্তু
  * কাস্টমারের চোখে ওগুলোও ডকুমেন্ট — তাই একই তালিকায় "পেমেন্ট রসিদ" গ্রুপে
- * দেখানো হয় (PRD সেকশন ৫.৪ — "booking form, allotment letter … + receipt")।
+ * দেখানো হয় (PRD সেকশন ৫.৭)।
  */
 function buildDocumentGroups(
   uploaded: DocumentItem[],
   payments: PaymentHistoryItem[],
+  preProjectBills: LedgerEntryView[],
 ): DocumentGroup[] {
   const receipts: DocumentItem[] = payments.map((payment) => ({
     id: `receipt-${payment.id}`,
@@ -109,75 +121,97 @@ function buildDocumentGroups(
     badge: 'PDF',
   }));
 
-  return groupDocuments([...uploaded, ...receipts]);
+  // PRD সেকশন ৫.২ — pre-project সার্ভিসের বিলগুলোও কাস্টমারের রসিদ। এগুলোর
+  // আলাদা প্রিন্ট পেজ নেই, তাই লিংক ছাড়া এন্ট্রি হিসেবেই দেখানো হয়।
+  const bills: DocumentItem[] = preProjectBills
+    .filter((entry) => entry.receiptNo !== null)
+    .map((entry) => ({
+      id: `bill-${entry.id}`,
+      type: 'Receipt',
+      title: `রসিদ ${entry.receiptNo}`,
+      meta: `${entry.dateLabel} · ${entry.categoryLabel} · ${entry.amountLabel}`,
+    }));
+
+  return groupDocuments([...uploaded, ...receipts, ...bills]);
 }
 
 /* --------------------------------------------------------- full portal */
 
-export type CustomerUnitDetail = {
-  unit: CustomerUnit;
-  timeline: UnitTimeline;
-  plan: SalePlan;
+export type CustomerProjectDetail = {
+  project: CustomerProject;
+  timeline: ProjectTimeline;
+  plan: ProjectPlan;
   /** সব কিস্তির পেমেন্ট একসাথে, সাম্প্রতিকটি আগে */
   payments: PaymentHistoryItem[];
+  /** Won হওয়ার আগের সার্ভিস বিল — শুধু client-visible income (PRD সেকশন ৫.২) */
+  preProjectBills: LedgerEntryView[];
   documents: DocumentGroup[];
 };
 
-async function loadUnitDetail(sale: SaleRow, now: Date): Promise<CustomerUnitDetail> {
-  const unit = toCustomerUnit(sale);
+async function loadProjectDetail(row: ProjectRow, now: Date): Promise<CustomerProjectDetail> {
+  const project = toCustomerProject(row);
 
-  const [timeline, plan, documents] = await Promise.all([
-    loadUnitTimeline(unit.unitId, now),
-    loadSalePlan(unit.saleId, now),
+  const [timeline, plan, documents, preProjectBills] = await Promise.all([
+    loadProjectTimeline(project.projectId, now),
+    loadProjectPlan(project.projectId, now),
     // কে আপলোড করেছেন সেটি কাস্টমারকে দেখানো হয় না (`showUploader` বন্ধ)
-    loadSaleDocuments(unit.saleId, unit.unitNo),
+    loadProjectDocuments(project.projectId, project.title),
+    loadClientVisibleEntries(row.leadId),
   ]);
 
   const payments = paymentHistory(plan.installments);
 
-  return { unit, timeline, plan, payments, documents: buildDocumentGroups(documents, payments) };
+  return {
+    project,
+    timeline,
+    plan,
+    payments,
+    preProjectBills,
+    documents: buildDocumentGroups(documents, payments, preProjectBills),
+  };
 }
 
 /**
- * কাস্টমার ড্যাশবোর্ডের পুরো ডেটা — ইউনিটপ্রতি সারাংশ, ফেজ টাইমলাইন, পেমেন্ট
- * শিডিউল, পেমেন্ট হিস্টরি ও ডকুমেন্ট।
+ * কাস্টমার ড্যাশবোর্ডের পুরো ডেটা — প্রজেক্ট সারাংশ, ফেজ টাইমলাইন, পেমেন্ট
+ * শিডিউল, পেমেন্ট হিস্টরি, প্রি-প্রজেক্ট বিল ও ডকুমেন্ট।
  *
- * সাধারণত একজন কাস্টমারের একটি ইউনিটই থাকে; একাধিক থাকলে প্রতিটির জন্য আলাদা
- * সেকশন দেখানো হয়, তাই তালিকা।
+ * সাধারণত একজন কাস্টমারের একটি প্রজেক্টই থাকে; একাধিক থাকলে (দ্বিতীয় বাড়ি)
+ * প্রতিটির জন্য আলাদা সেকশন দেখানো হয়, তাই তালিকা।
  */
 export async function loadCustomerPortal(
   userId: string,
   now: Date,
-): Promise<CustomerUnitDetail[]> {
+): Promise<CustomerProjectDetail[]> {
   const customer = await prisma.customer.findUnique({
     where: { userId },
-    select: { sales: { select: saleSelect, orderBy: { saleDate: 'desc' } } },
+    select: { projects: { select: projectSelect, orderBy: { createdAt: 'desc' } } },
   });
 
-  return Promise.all((customer?.sales ?? []).map((sale) => loadUnitDetail(sale, now)));
+  return Promise.all((customer?.projects ?? []).map((project) => loadProjectDetail(project, now)));
 }
 
 /** শুধু ডকুমেন্ট পাতার জন্য — টাইমলাইন লোড না করে হালকা কুয়েরি */
 export async function loadCustomerDocuments(
   userId: string,
   now: Date,
-): Promise<{ unit: CustomerUnit; documents: DocumentGroup[] }[]> {
+): Promise<{ project: CustomerProject; documents: DocumentGroup[] }[]> {
   const customer = await prisma.customer.findUnique({
     where: { userId },
-    select: { sales: { select: saleSelect, orderBy: { saleDate: 'desc' } } },
+    select: { projects: { select: projectSelect, orderBy: { createdAt: 'desc' } } },
   });
 
   return Promise.all(
-    (customer?.sales ?? []).map(async (sale) => {
-      const unit = toCustomerUnit(sale);
-      const [plan, documents] = await Promise.all([
-        loadSalePlan(unit.saleId, now),
-        loadSaleDocuments(unit.saleId, unit.unitNo),
+    (customer?.projects ?? []).map(async (row) => {
+      const project = toCustomerProject(row);
+      const [plan, documents, bills] = await Promise.all([
+        loadProjectPlan(project.projectId, now),
+        loadProjectDocuments(project.projectId, project.title),
+        loadClientVisibleEntries(row.leadId),
       ]);
 
       return {
-        unit,
-        documents: buildDocumentGroups(documents, paymentHistory(plan.installments)),
+        project,
+        documents: buildDocumentGroups(documents, paymentHistory(plan.installments), bills),
       };
     }),
   );

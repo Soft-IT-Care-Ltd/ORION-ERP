@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, MapPin } from 'lucide-react';
+import { ArrowLeft, MapPin, UserRound } from 'lucide-react';
 import { getAuthorizedUser } from '@/lib/guards';
-import { findScopedUnit } from '@/lib/project-access';
-import { loadUnitTimeline } from '@/lib/phase-data';
+import { findScopedProject } from '@/lib/project-access';
+import { loadProjectTimeline } from '@/lib/phase-data';
+import { buildingTypeLabel } from '@/lib/leads';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhaseProgressSummary, PhaseTimeline, PhaseUpdateLog } from '@/components/phase-timeline';
@@ -11,15 +12,17 @@ import { PhaseUpdateDialog } from '../phase-update-dialog';
 
 export const metadata = { title: 'ফেজ আপডেট' };
 
-export default async function EngineerUnitPage({ params }: { params: { unitId: string } }) {
+export const dynamic = 'force-dynamic';
+
+export default async function EngineerSitePage({ params }: { params: { projectId: string } }) {
   const user = await getAuthorizedUser('phase:update');
   if (!user) redirect('/');
 
-  // scope সহ — অন্য সাইটের ইউনিট URL দিয়ে খোলা যাবে না
-  const unit = await findScopedUnit(user, params.unitId);
-  if (!unit) notFound();
+  // scope সহ — অন্য কারও সাইটের id দিয়ে খোলা যাবে না
+  const project = await findScopedProject(user, params.projectId);
+  if (!project) notFound();
 
-  const { phases, summary, updates } = await loadUnitTimeline(unit.id, new Date());
+  const { phases, summary, updates } = await loadProjectTimeline(project.id, new Date());
 
   // এখানেই টাইমলাইনটি এডিটযোগ্য হয় — প্রতিটি ফেজের বিপরীতে আপডেট বাটন।
   // Admin ও Customer একই কম্পোনেন্ট `actions` ছাড়া ব্যবহার করে, তাই সেখানে read-only।
@@ -49,19 +52,31 @@ export default async function EngineerUnitPage({ params }: { params: { unitId: s
       </Button>
 
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">
-          {unit.project.name} — {unit.unitNo}
-        </h1>
-        <p className="flex items-center gap-1 text-sm text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5 shrink-0" />
-          {unit.project.location}
+        <h1 className="text-xl font-semibold">{project.title}</h1>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <UserRound className="h-3.5 w-3.5 shrink-0" />
+            {project.customer.user.name}
+          </span>
+          {project.landLocation ? (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              {project.landLocation}
+            </span>
+          ) : null}
+          {buildingTypeLabel(project.buildingType) ? (
+            <span>
+              {buildingTypeLabel(project.buildingType)}
+              {project.floors ? ` · ${project.floors} তলা` : ''}
+            </span>
+          ) : null}
         </p>
       </div>
 
       <PhaseProgressSummary
         summary={summary}
-        title={`${unit.unitNo} — নির্মাণ অগ্রগতি`}
-        subtitle={unit.project.name}
+        title="নির্মাণ অগ্রগতি"
+        subtitle={project.title}
       />
 
       <Card>
@@ -75,7 +90,7 @@ export default async function EngineerUnitPage({ params }: { params: { unitId: s
           <PhaseTimeline
             phases={phases}
             actions={actions}
-            emptyMessage="এই ইউনিটে এখনো ফেজ টাইমলাইন নেই — অ্যাডমিনকে টেমপ্লেট প্রয়োগ করতে বলুন"
+            emptyMessage="এই সাইটে এখনো ফেজ টাইমলাইন নেই — অ্যাডমিনকে টেমপ্লেট প্রয়োগ করতে বলুন"
           />
         </CardContent>
       </Card>
@@ -88,7 +103,7 @@ export default async function EngineerUnitPage({ params }: { params: { unitId: s
         <CardContent>
           <PhaseUpdateLog
             updates={updates}
-            emptyMessage="আপনি এখনো এই ইউনিটে কোনো আপডেট দেননি"
+            emptyMessage="এই সাইটে এখনো কোনো আপডেট দেওয়া হয়নি"
           />
         </CardContent>
       </Card>

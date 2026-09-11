@@ -85,12 +85,12 @@ export function OverdueTable({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link
-                  href={`/accounts/schedule/${row.saleId}`}
+                  href={`/accounts/schedule/${row.projectId}`}
                   className="truncate font-medium hover:underline"
                 >
                   {row.customerName}
                 </Link>
-                <p className="truncate text-xs text-muted-foreground">{row.unitLabel}</p>
+                <p className="truncate text-xs text-muted-foreground">{row.projectTitle}</p>
               </div>
               <span
                 className={cn(
@@ -129,7 +129,7 @@ export function OverdueTable({
           <thead className="border-b bg-muted/50">
             <tr className="text-left [&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
               <th>কাস্টমার</th>
-              <th>ইউনিট</th>
+              <th>প্রজেক্ট</th>
               <th>কিস্তি</th>
               <th className="whitespace-nowrap">শেষ তারিখ</th>
               <th className="text-right whitespace-nowrap">কত দিন</th>
@@ -141,7 +141,7 @@ export function OverdueTable({
               <tr key={row.installmentId} className="border-b last:border-0 [&>td]:px-3 [&>td]:py-2">
                 <td>
                   <Link
-                    href={`/accounts/schedule/${row.saleId}`}
+                    href={`/accounts/schedule/${row.projectId}`}
                     className="font-medium hover:underline"
                   >
                     {row.customerName}
@@ -155,7 +155,7 @@ export function OverdueTable({
                     </a>
                   ) : null}
                 </td>
-                <td className="text-muted-foreground">{row.unitLabel}</td>
+                <td className="text-muted-foreground">{row.projectTitle}</td>
                 <td>{row.label}</td>
                 <td className="whitespace-nowrap tabular-nums">{row.dueDateLabel}</td>
                 <td className="text-right">

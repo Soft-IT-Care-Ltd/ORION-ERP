@@ -1,168 +1,134 @@
-# Orion Builders CRM/ERP — সব Claude Code Prompts (ফেজ-বাই-ফেজ)
+# Orion Builders CRM/ERP — বাকি থাকা Claude Code Prompts (শুধু Pending)
 
-এই ফাইলে প্রতিটি ফেজের জন্য **সম্পূর্ণ, কপি-পেস্ট রেডি prompt** দেওয়া আছে। একটার পর একটা ক্রমানুসারে ব্যবহার করুন — একবারে একটার বেশি ফেজের prompt দেবেন না। প্রতিটি ফেজ শেষে টেস্ট করে, git commit করে তারপর পরের prompt দিন।
+> এই ফাইল **শুধু যেসব ফেজ এখনো বাকি** তার prompt রাখে। সম্পন্ন হওয়া ফেজ (0, 1, 2, ব্র্যান্ড, প্রবাসী-correction, পুরনো Phase 7) এখানে আর নেই — সেগুলোর ইতিহাস `history/04_PROMPTS_DONE.md` ফাইলে রাখা আছে (শুধু রেফারেন্সের জন্য, Claude Code কে দেওয়ার দরকার নেই)।
 
-> ফোল্ডারে ইতিমধ্যে আছে: `01_PRD.md`, `02_BUILD_PLAN.md`, `03_schema.prisma`, `CLAUDE.md` — Claude Code এই ফাইলগুলো পড়ে কাজ করবে, তাই প্রতিটি prompt এ এগুলোর রেফারেন্স দেওয়া আছে।
+**এখন পর্যন্ত অবস্থা (১০ সেপ্টেম্বর ২০২৬):**
 
----
+| ফেজ | অবস্থা |
+|---|---|
+| 0 — Setup | ✅ সম্পন্ন |
+| 1 — Auth/RBAC | ✅ সম্পন্ন |
+| 2 — Lead/Pipeline (old model) | ✅ সম্পন্ন |
+| ব্র্যান্ড ইন্টিগ্রেশন | ✅ সম্পন্ন |
+| প্রবাসী correction (phone/local contact/lead docs) | ✅ সম্পন্ন |
+| R2 storage migration | ❓ **অনিশ্চিত — আপনি কি এটা চালিয়েছেন?** |
+| **2.5 — Business Model Migration** | ⏳ **পরের কাজ, এখনই লাগবে** |
+| 3 — Project & Phase Timeline v2 | ⏳ বাকি |
+| 4 — Payment Plan & Accounts Ledger v2 | ⏳ বাকি |
+| 5 — Customer Portal v2 | ⏳ বাকি |
+| 6 — Notifications, Reports & Dashboard v2 | ⏳ বাকি |
+| 7 — Polish, Testing & Deployment (v2 rewrite) | ⏳ বাকি (পুরনো Phase 7 হয়েছিল কিন্তু old schema তে — v2 এর seed/testing Phase 2.5 এর prompt এর ৭ নং ধাপেই রিজেনারেট হবে) |
 
-## Phase 0 — Project Setup
+⚠️ **R2 storage migration নিশ্চিত করুন:** `08_R2_STORAGE_MIGRATION.md` চালিয়েছেন কিনা মনে করতে পারছি না — যদি না চালিয়ে থাকেন, Phase 3 এর আগে বা Phase 3 এর prompt এর মধ্যেই (নিচে নোট করা আছে) সেটা করিয়ে নেবেন।
 
-```
-এই ফোল্ডারে থাকা 01_PRD.md, 02_BUILD_PLAN.md, 03_schema.prisma, এবং CLAUDE.md ফাইলগুলো পড়ো।
-
-এখন একটি Next.js 14 (App Router, TypeScript) প্রজেক্ট সেটআপ করো নিচের স্ট্যাক দিয়ে:
-- Tailwind CSS + shadcn/ui
-- Prisma ORM + PostgreSQL (schema হিসেবে 03_schema.prisma ব্যবহার করো, prisma/schema.prisma এ কপি করে বসাও)
-- NextAuth.js দিয়ে Credentials-based login সেটআপ করো, যেখানে প্রতিটি ইউজারের একটি role থাকবে (ADMIN, MARKETING, ENGINEER, ACCOUNTS, CUSTOMER — schema.prisma এর Role enum অনুযায়ী)
-
-একটি .env.example ফাইল বানাও DATABASE_URL ও NEXTAUTH_SECRET সহ। প্রজেক্ট স্ট্রাকচার 02_BUILD_PLAN.md এর সেকশন ২ অনুযায়ী রাখো।
-
-শেষে বলো কীভাবে আমি লোকালি DB কানেক্ট করে `npx prisma migrate dev` চালাবো।
-```
-
----
-
-## Phase 1 — Auth + RBAC + Base Layout
-
-```
-01_PRD.md এর সেকশন ৪ (User Roles & Permission Matrix) পড়ো।
-
-lib/rbac.ts ফাইলে একটি permission mapping বানাও যেখানে প্রতিটি role (admin, marketing, engineer, accounts, customer) এর জন্য কোন কোন module/action allowed তা define করা থাকবে, PRD এর টেবিল অনুযায়ী।
-
-middleware.ts এ route protection যোগ করো:
-- /admin/** শুধু ADMIN role
-- /sales/** শুধু MARKETING (এবং ADMIN)
-- /engineer/** শুধু ENGINEER (এবং ADMIN)
-- /customer/** শুধু CUSTOMER
-- অন্য role এর ইউজার ভুল route এ গেলে তাদের নিজের ড্যাশবোর্ডে redirect করো
-
-প্রতিটি role এর জন্য আলাদা layout বানাও (app/admin/layout.tsx, app/sales/layout.tsx ইত্যাদি) — sidebar নেভিগেশনসহ, role অনুযায়ী মেনু আইটেম আলাদা হবে।
-
-Admin panel এ একটি User Management page বানাও যেখান থেকে নতুন ইউজার তৈরি ও role assign করা যাবে।
-```
+একটার পর একটা ক্রমানুসারে ব্যবহার করুন — একবারে একটার বেশি ফেজের prompt দেবেন না। প্রতিটি ফেজ শেষে টেস্ট করে, git commit করে তারপর পরের prompt দিন।
 
 ---
 
-## Phase 2 — Lead Management & Sales Pipeline
+## Phase 2.5 — Business Model Migration ⚠️ প্রথমে এটা করুন
+
+`09_BUSINESS_MODEL_MIGRATION_PROMPT.md` ফাইলে সম্পূর্ণ prompt আছে — Phase 3 শুরু করার আগে এটা চালানো বাধ্যতামূলক (Unit/Sale মডেল সরানো, নতুন pipeline stages, LeadChecklistItem, LedgerEntry, Lead→Project conversion, Follow-up/Performance পেজ — সব একসাথে এই একটা prompt এ আছে)।
+
+---
+
+## Phase 3 — Project & Phase Timeline (v2 — Unit ছাড়া)
 
 ```
-01_PRD.md এর সেকশন ৫.১ (Lead Management & Sales Pipeline) পড়ো।
+01_PRD.md এর সেকশন ৫.৪ (Project & Construction Phase Management) পড়ো। 03_schema.prisma (v2) এর Project, PhaseTemplate, Phase মডেল দেখো — Project সরাসরি Lead এর সাথে ১:১ (কোনো Unit নেই, এক ক্লায়েন্ট = এক প্রজেক্ট)।
 
-Lead model ব্যবহার করে (03_schema.prisma এর Lead, LeadActivity) একটি Kanban-style pipeline board বানাও app/sales/pipeline এ, নিচের stage গুলো column হিসেবে:
-New Lead → Contacted → Site Visit Scheduled → Site Visit Done → Negotiation → Booking → Sale Agreement Signed → Won / Lost
+Admin panel এ (app/admin/projects) Project লিস্ট/detail পেজ বানাও (Project গুলো Lead "Won" হলে তৈরি হয় — Phase 2.5 এ এই conversion লজিক বানানো হয়েছে)। প্রতিটি Project এ:
+- সামারি: title, land location, building type, floors, total contract value, rate per sqft, start date
+- একটা "Camera Stream URL" ফিল্ড এডিট করার অপশন (লাইভ CC ক্যামেরা — MVP তে শুধু URL সেভ হবে, admin manually বসাবে)
 
-প্রতিটি lead card এ দেখাবে: নাম, ফোন, source, next follow-up date, assigned executive। Drag & drop দিয়ে stage change করা যাবে (stage change হলে LeadActivity তে auto note যোগ হবে)।
+একটা global PhaseTemplate ম্যানেজমেন্ট পেজ বানাও (app/admin/settings/phase-template) — PRD সেকশন ৫.৪ এর ৭টা ডিফল্ট ফেজ (Site Mobilization, Foundation, Structure, Brick Work & Plaster, Electrical/Plumbing, Finishing, Handover) prefill করা থাকবে, edit/reorder করা যাবে। Project তৈরি হওয়ার সময় এই টেমপ্লেট থেকে কপি করে সেই Project এর জন্য Phase রেকর্ড অটো তৈরি হবে।
 
-একটি Lead Create/Edit ফর্ম বানাও (নাম, ফোন, ইমেইল, source, interested unit, budget range, assigned marketing executive)।
+একটি reusable PhaseTimeline component বানাও (components/phase-timeline) — horizontal stepper/progress bar, প্রতিটি phase এর status, % complete, planned vs actual date। Admin, Engineer, Customer তিন জায়গাতেই ব্যবহার হবে (শুধু Engineer এডিট করতে পারবে)।
 
-Lead detail page বানাও যেখানে activity log/notes টাইমলাইন আকারে দেখা যাবে এবং নতুন নোট যোগ করা যাবে।
+app/engineer এ "My Sites" page বানাও যেখানে অ্যাসাইন করা Project এর লিস্ট থাকবে। প্রতিটিতে ক্লিক করলে phase update ফর্ম: % complete (0/25/50/75/100), remarks, ফটো আপলোড (multiple files)। সাবমিট করলে PhaseUpdate রেকর্ড তৈরি হবে।
 
-"Lost" stage এ move করলে একটি reason dropdown বাধ্যতামূলক করো (PRD অনুযায়ী: Price too high, Chose competitor, Location mismatch, Financing issue, No response, Other)।
-
-Marketing executive এর নিজের ড্যাশবোর্ডে একটি সাধারণ funnel সংখ্যা (stage-wise lead count) দেখাও, কিন্তু শুধু তার নিজের assigned lead গুলোর জন্য। Admin সবগুলো দেখতে পাবে।
+ফটো স্টোরেজ: `08_R2_STORAGE_MIGRATION.md` অনুযায়ী lib/upload.ts যদি ইতিমধ্যে R2 তে সুইচ করা থাকে সেটা reuse করো, না থাকলে আগে সেটা করে নাও (local disk এ ফটো সেভ করলে Vercel deploy এ কাজ করবে না)।
 ```
 
 ---
 
-## Phase 2.1 — Lead → Project Auto-Conversion
+## Phase 4 — Payment Plan & Accounts Ledger Module (v2)
 
 ```
-Lead pipeline এ "Won" stage এ move করলে একটি ফর্ম/মোডাল খুলবে যেখানে Admin/Marketing ইউনিট সিলেক্ট করে sale confirm করবে।
+01_PRD.md এর সেকশন ৫.৫ (Payment Plan) ও ৫.৬ (Accounts & Ledger) পড়ো। 03_schema.prisma (v2) এর PaymentPlan, Installment (phaseId optional), LedgerEntry মডেল দেখো।
 
-Confirm করলে backend এ (server action বা API route) নিচেরগুলো auto তৈরি হবে (03_schema.prisma অনুযায়ী):
-- Customer রেকর্ড (যদি না থাকে, নতুন User role=CUSTOMER সহ তৈরি হবে, নাম-ফোন Lead থেকে কপি হবে)
-- Sale রেকর্ড (leadId, unitId, customerId, totalAmount লিংক করে)
-- Unit status "SOLD" এ আপডেট হবে
+১. app/accounts এ Payment Plan Builder বানাও: একটা Project সিলেক্ট করে installment schedule তৈরি — প্রতিটা installment ঐচ্ছিকভাবে একটা Phase এর সাথে লিংক করা যাবে (label, due date, amount, phase)।
 
-এই পুরো প্রসেসটা draft/pending অবস্থায় থাকবে যতক্ষণ না Accounts/Admin PaymentPlan সেট করে confirm করছে (Phase 4 এ কভার হবে)।
-```
+২. Payment Schedule টেবিল component (রঙ-কোডেড: Paid=green, Partial=yellow, Overdue=red, Scheduled=gray) — Admin, Accounts, Customer এ reuse হবে।
 
----
+৩. app/accounts এ Payment Entry ফর্ম (Installment সিলেক্ট, amount, method, receipt no) → Payment রেকর্ড + status আপডেট + PDF receipt + "Send via WhatsApp" বাটন (wa.me deep-link, PRD সেকশন ৫.২ অনুযায়ী)।
 
-## Phase 3 — Project, Unit & Phase Timeline
+৪. Overdue detection (cron/on-demand) + Aging report (0-15/16-30/30+ days)।
 
-```
-01_PRD.md এর সেকশন ৫.২ (Project & Construction Phase Management) পড়ো।
+৫. **নতুন — Accounts Ledger module:**
+   - app/accounts/ledger এ একটা পেজ বানাও যেখানে LedgerEntry তৈরি করা যাবে — type (Income/Expense), category (Site Visit/Digital Survey/Soil Test/Design/Govt Approval/Material Cost/Labor Cost/Office Overhead/Other), amount, note, এবং ঐচ্ছিকভাবে একটা Lead/Client সিলেক্ট করা (leadId — এতে Client-wise ও Company-wide দুই জায়গাতেই লিংক হয়ে যায়, PRD সেকশন ৫.৬ অনুযায়ী)
+   - **CRITICAL VALIDATION:** type=EXPENSE হলে clientVisible সবসময় false থাকবে (server-side এ enforce করো, UI validation যথেষ্ট না) — কোনোভাবেই customer role expense entry দেখতে/query করতে পারবে না
+   - type=INCOME এবং leadId সেট থাকলে receipt no auto-generate হবে + "Send via WhatsApp" অপশন থাকবে (Payment Entry এর মতোই)
+   - Lead/Project detail পেজে একটা "Client Ledger" ট্যাব বানাও — সেই client এর সব LedgerEntry (income+expense) + মোট billed, মোট received, মোট internal cost, net profit/loss সামারি কার্ড
+   - Main Accounts ড্যাশবোর্ডে (app/accounts/dashboard) মাসিক Total Income vs Total Expense সামারি (leadId থাকুক বা না থাকুক — সব এন্ট্রি নিয়ে)
 
-Admin panel এ Project ও Unit এর CRUD পেজ বানাও (app/admin/projects)। প্রতিটি প্রজেক্টে একটি PhaseTemplate সেট করা যাবে (default 8 phase: Land Acquisition, Design & Approval, Foundation, Structure, Brick Work & Plaster, Electrical/Plumbing, Finishing, Handover — PRD এর টেবিল অনুযায়ী, order ও default duration সহ)।
-
-একটি reusable PhaseTimeline component বানাও (components/phase-timeline) — horizontal stepper বা progress bar, প্রতিটি phase এর status (upcoming/in-progress/done/delayed), % complete, planned vs actual date দেখাবে। এটা Admin, Engineer, ও Customer তিন জায়গাতেই ব্যবহার হবে (শুধু Engineer এ এডিট করা যাবে)।
-
-app/engineer এ একটি "My Sites" page বানাও যেখানে অ্যাসাইন করা ইউনিট/প্রজেক্টের লিস্ট থাকবে। প্রতিটিতে ক্লিক করলে phase update ফর্ম খুলবে: % complete (0/25/50/75/100 dropdown বা slider), remarks টেক্সট, এবং ফটো আপলোড (multiple files)। সাবমিট করলে PhaseUpdate রেকর্ড তৈরি হবে এবং Phase এর percentComplete/status আপডেট হবে।
-
-ফটো স্টোরেজের জন্য আপাতত local /public/uploads এ সেভ করো (পরে S3/R2 এ migrate করা যাবে) — একটি lib/upload.ts হেল্পার বানাও যাতে পরে সহজে সোর্স বদলানো যায়।
+কাজ শেষে টেস্ট করো: একটা lead এ একটা "Soil Test" income entry (৳৫,০০০) আর একটা internal cost entry (৳৩,৫০০) দিয়ে — client profile এ net profit ৳১,৫০০ দেখাচ্ছে কিনা, আর customer role দিয়ে লগইন করলে expense entry টা কোথাও দেখা যাচ্ছে না কিনা যাচাই করো।
 ```
 
 ---
 
-## Phase 4 — Payment Plan & Accounts Module
+## Phase 5 — Customer Portal (v2)
 
 ```
-01_PRD.md এর সেকশন ৫.৩ (Payment Plan & Schedule) পড়ো।
+01_PRD.md এর সেকশন ৫.৭ (Customer Portal) পড়ো।
 
-app/accounts এ একটি Payment Plan Builder বানাও: একটি Sale সিলেক্ট করে installment schedule তৈরি করা যাবে — হয় PRD এর স্যাম্পল টেমপ্লেট (Booking 5%, Down payment 15%, Agreement 10%, ২০টি মাসিক কিস্তি প্রতিটি ২.৫%, Handover এ বাকি ১০%) থেকে auto-generate, অথবা ম্যানুয়ালি কাস্টম installment যোগ/এডিট করা যাবে (label, due date, amount)।
-
-একটি Payment Schedule টেবিল component বানাও যা status অনুযায়ী রঙ-কোডেড হবে (Paid=green, Partial=yellow, Overdue=red, Scheduled=gray)। এই component Admin, Accounts, ও Customer সবার প্যানেলে reuse হবে (Customer শুধু দেখবে, এডিট করতে পারবে না)।
-
-app/accounts এ Payment Entry ফর্ম বানাও: একটি Installment সিলেক্ট করে amount received, method (Cash/Bank/bKash/Nagad/Cheque), receipt no লিখে সাবমিট করলে Payment রেকর্ড তৈরি হবে, Installment status আপডেট হবে (partial হলে remaining amount ক্যালকুলেট করবে), এবং একটি প্রিন্টযোগ্য/PDF receipt জেনারেট হবে।
-
-একটি Overdue detection লজিক বানাও (cron বা on-demand query): due date পার হয়ে গেছে কিন্তু status Paid না এমন installment গুলোকে Overdue মার্ক করবে। Accounts ড্যাশবোর্ডে একটি Aging report দেখাও (0-15 days, 16-30 days, 30+ days overdue, মোট amount ও count সহ)।
-```
-
----
-
-## Phase 5 — Customer Portal
-
-```
-01_PRD.md এর সেকশন ৫.৪ (Customer Portal) পড়ো।
-
-app/customer এ কাস্টমার ড্যাশবোর্ড বানাও, লগইন করা কাস্টমারের নিজের Sale/Unit ডেটা দেখাবে:
-- প্রজেক্ট সামারি কার্ড (project name, location, unit no, size, booking date, total amount)
+app/customer এ কাস্টমার ড্যাশবোর্ড বানাও, লগইন করা কাস্টমারের নিজের Project ডেটা দেখাবে:
+- প্রজেক্ট সামারি কার্ড (title, location, building type, floors, start date, total contract value)
 - PhaseTimeline component (read-only, Phase 3 এ বানানো)
-- Payment Schedule টেবিল (read-only, Phase 4 এ বানানো component reuse করো)
-- Payment history লিস্ট, প্রতিটি entry এর পাশে "Download Receipt" বাটন (PDF)
-- Document list (Document model থেকে, type অনুযায়ী গ্রুপ করা: Booking Form, Sale Agreement, Allotment Letter, Receipts)
+- **Live Camera সেকশন:** Project.cameraStreamUrl সেট থাকলে embed করে দেখাও (iframe বা HLS player — hls.js লাগলে ব্যবহার করো), না থাকলে "এই মুহূর্তে লাইভ ক্যামেরা সংযুক্ত নেই" মেসেজ
+- Payment Schedule টেবিল (read-only, Phase 4 এর component reuse) + pre-project service বিলগুলো (LedgerEntry যেখানে type=INCOME ও clientVisible=true) আলাদা সেকশনে
+- Payment history লিস্ট + "Download Receipt" বাটন (PDF) — construction installment ও pre-project বিল দুটোরই
+- Document list (Document model থেকে, type অনুযায়ী গ্রুপ করা)
 
-সবকিছু মোবাইল-ফার্স্ট রেসপন্সিভ হতে হবে, কারণ কাস্টমাররা মূলত মোবাইল থেকে দেখবে।
+**নিরাপত্তা — বাধ্যতামূলক:** এই সব API route/server action এ query-level এ নিশ্চিত করো যে কোনো LedgerEntry type=EXPENSE কখনো customer session এ রিটার্ন হচ্ছে না, clientVisible=false এমন কোনো income entry ও না। এটা টেস্ট করার জন্য customer লগইন করে network tab/response payload চেক করো।
+
+সবকিছু মোবাইল-ফার্স্ট রেসপন্সিভ হতে হবে।
 ```
 
 ---
 
-## Phase 6 — Notifications, Reports & Dashboard
+## Phase 6 — Notifications, Reports & Dashboard (v2)
 
 ```
-01_PRD.md এর সেকশন ৫.৬ ও ৫.৭ পড়ো।
+01_PRD.md এর সেকশন ৫.৯ ও ৫.১০ পড়ো।
 
-lib/notifications.ts এ একটি নোটিফিকেশন হেল্পার বানাও যা Notification মডেলে এন্ট্রি তৈরি করবে এই ইভেন্টগুলোতে:
-- Lead এর nextFollowUpAt পার হয়ে গেলে (assigned marketing executive কে)
-- Installment due date এর ৭ দিন আগে ও overdue হলে (customer + accounts কে)
-- Phase status "DONE" হলে (customer কে)
+lib/notifications.ts এ notification হেল্পার — ইভেন্ট: Lead follow-up due, Installment due/overdue (৭ দিন আগে + overdue হলে), Phase status DONE।
 
-একটি in-app notification bell/dropdown বানাও header এ (unread count badge সহ), সব role এর layout এ।
+In-app notification bell/dropdown (unread badge) সব role এর layout এ।
 
-Admin dashboard এ (app/admin/dashboard) Recharts দিয়ে ৩টি চার্ট বানাও:
-1. Sales Funnel — bar chart, stage-wise lead count (PRD সেকশন ৫.১ এর স্যাম্পল টেবিলের মতো)
-2. Project Progress Overview — প্রতিটি active প্রজেক্ট/ইউনিটের average % complete
-3. Collected vs Receivable — মাসিক ভিত্তিতে line/bar chart, PRD সেকশন ৫.৩ এর KPI অনুযায়ী
+Admin dashboard এ (app/admin/dashboard) Recharts দিয়ে চার্ট:
+1. Pre-project funnel — stage-wise lead count (PRD সেকশন ৫.১ এর নতুন stage list অনুযায়ী)
+2. Project Progress Overview — active প্রজেক্টগুলোর average % complete
+3. মাসিক Collected vs Receivable (construction installment)
+4. **নতুন — Client-wise Profitability টেবিল:** প্রতিটা client এর total billed, total cost, net margin (Ledger থেকে aggregate), sortable by margin
+5. **নতুন — Company Monthly Income vs Expense** (LedgerEntry থেকে, leadId থাকুক না থাকুক সব মিলিয়ে)
 
-প্রতিটি চার্টের ডেটা Prisma aggregate query দিয়ে নিয়ে আসবে, hardcoded ডেটা নয়।
+প্রতিটি চার্টের ডেটা Prisma aggregate query দিয়ে আনবে।
 ```
 
 ---
 
-## Phase 7 — Polish, Testing & Deployment
+## Phase 7 — Polish, Testing & Deployment (v2 rewrite)
+
+> নোট: এই ফেজ আগে একবার (old Sale/Unit মডেল ধরে) হয়েছিল, কিন্তু Phase 2.5 এর migration এ `seed.ts` ও `TESTING.md` ইতিমধ্যে v2-তে rewrite হয়ে যাবে। তাই এখানে যা বাকি থাকে তা মূলত Vercel deployment finalize করা ও শেষ QA pass।
 
 ```
-পুরো অ্যাপে Zod দিয়ে form validation যোগ করো (client + server side)।
+পুরো অ্যাপে Zod দিয়ে form validation আছে কিনা রিভিউ করো (client + server side), যেখানে বাদ পড়েছে সেখানে যোগ করো — বিশেষত Phase 2.5-6 এ নতুন যোগ হওয়া ফর্মগুলো (checklist, ledger entry, project convert modal, follow-up log)।
 
-prisma/seed.ts বানাও যেখানে টেস্টের জন্য স্যাম্পল ডেটা থাকবে: ৫টা ইউজার (প্রতিটি role এর একজন করে), ১টা Project ৪-৫টা Unit সহ, কয়েকটা Lead বিভিন্ন stage এ, একটা সম্পূর্ণ Sale → PaymentPlan → কিছু Payment paid, কিছু Phase আপডেট।
-
-একটি end-to-end manual test checklist বানাও (markdown ফাইল, TESTING.md): Lead তৈরি → pipeline এ move → Won → Project convert → Payment plan সেট → payment entry → phase update → customer portal এ verify — প্রতিটি ধাপ।
+TESTING.md (Phase 2.5 তে rewrite হয়েছে) অনুযায়ী পুরো end-to-end flow ম্যানুয়ালি টেস্ট করো।
 
 মোবাইল ভিউতে (বিশেষত Engineer ও Customer panel) সব পেজ রেসপন্সিভনেস চেক করো, ছোট স্ক্রিনে ভাঙা লেআউট থাকলে ঠিক করো।
 
-Vercel deployment এর জন্য প্রয়োজনীয় কনফিগারেশন (vercel.json যদি লাগে, build script) ঠিক করো এবং deploy করার স্টেপ-বাই-স্টেপ নির্দেশনা দাও।
+Vercel deployment এর জন্য প্রয়োজনীয় কনফিগারেশন (vercel.json, build script, R2 env vars) ঠিক করো এবং deploy করার স্টেপ-বাই-স্টেপ নির্দেশনা দাও।
 ```
 
 ---

@@ -23,7 +23,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { deleteProject } from './actions';
-import { ProjectFormDialog, type EditableProject, type EngineerOption } from './project-form-dialog';
+import {
+  ProjectEditDialog,
+  type EditableProject,
+  type EngineerOption,
+} from './project-edit-dialog';
 
 /**
  * Radix Dialog সরাসরি DropdownMenuItem এর ভেতরে রাখলে menu বন্ধ হওয়ার সময় dialog ও
@@ -32,11 +36,12 @@ import { ProjectFormDialog, type EditableProject, type EngineerOption } from './
 export function ProjectRowActions({
   project,
   engineers,
-  unitCount,
+  phaseCount,
 }: {
   project: EditableProject;
   engineers: EngineerOption[];
-  unitCount: number;
+  /** কতগুলো ফেজ মুছে যাবে — নিশ্চিতকরণের বার্তায় দেখানো হয় */
+  phaseCount: number;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -61,7 +66,7 @@ export function ProjectRowActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label={`${project.name} এর অপশন`}>
+          <Button variant="ghost" size="icon" aria-label={`${project.title} এর অপশন`}>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -81,7 +86,7 @@ export function ProjectRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ProjectFormDialog
+      <ProjectEditDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         project={project}
@@ -91,10 +96,10 @@ export function ProjectRowActions({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{project.name} মুছে ফেলবেন?</AlertDialogTitle>
+            <AlertDialogTitle>{project.title} মুছে ফেলবেন?</AlertDialogTitle>
             <AlertDialogDescription>
-              এর {unitCount} টি ইউনিট ও সেগুলোর ফেজ টাইমলাইনও মুছে যাবে। বিক্রিত বা লিডের সঙ্গে
-              যুক্ত ইউনিট থাকলে মোছা যাবে না। এই কাজটি ফেরানো যাবে না।
+              এর {phaseCount} টি ফেজ ও সাইট আপডেটও মুছে যাবে, আর লিডটি আবার দরদাম স্টেজে ফেরত
+              যাবে। কোনো পেমেন্ট বা ডকুমেন্ট জমা থাকলে মোছা যাবে না। এই কাজটি ফেরানো যাবে না।
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

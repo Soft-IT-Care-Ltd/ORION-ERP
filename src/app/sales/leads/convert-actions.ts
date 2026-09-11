@@ -2,7 +2,7 @@
 
 import { randomBytes } from 'crypto';
 import { revalidatePath } from 'next/cache';
-import { LeadActivityType, LeadStage, Prisma, Role, SaleStatus, UnitStatus } from '@prisma/client';
+import { LeadActivityType, LeadStage, Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
@@ -17,18 +17,30 @@ import {
   zodErrors,
 } from '@/lib/action-result';
 import { STAGE_LABEL } from '@/lib/leads';
-import { unitLabel } from '@/lib/sales';
+import { buildProjectTitle } from '@/lib/projects';
+import { planPhaseDates } from '@/lib/phases';
 import { formatBDT } from '@/lib/utils';
-import { convertLeadSchema } from '@/lib/validations/sale';
+import { convertLeadSchema } from '@/lib/validations/convert';
 
 export type { ActionResult } from '@/lib/action-result';
 
 /**
  * লিডে ইমেইল না থাকলে কাস্টমার অ্যাকাউন্টের placeholder ইমেইল এই ডোমেইনে তৈরি হয়।
  * `.invalid` RFC 2606 এ সংরক্ষিত — এখানে ভুল করেও মেইল চলে যাবে না। Admin পরে
- * ইউজার এডিট করে আসল ইমেইল বসাবেন (তার আগে কাস্টমার পোর্টালে লগইন করতে পারবেন না)।
+ * ইউজার এডিট করে আসল ইমেইল বসাবেন।
  */
 const CUSTOMER_EMAIL_DOMAIN = 'orion.invalid';
+
+/**
+ * নতুন কাস্টমার অ্যাকাউন্টের অস্থায়ী পাসওয়ার্ড — কনভার্শনের পর একবারই Admin কে
+ * দেখানো হয় (কপি করার জন্য), কোথাও সংরক্ষিত থাকে না। ছোট রাখা হয়েছে যাতে
+ * ফোনে বলে দেওয়া যায়, কিন্তু এলোমেলো বলে অনুমান করা যায় না।
+ */
+function generateTempPassword(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = randomBytes(10);
+  return `Orion-${[...bytes].map((b) => alphabet[b % alphabet.length]).join('')}`;
+}
 
 /** transaction এর ভেতর থেকে ফিল্ড-এরর সহ বেরিয়ে আসার জন্য */
 class ConvertError extends Error {
@@ -62,8 +74,8 @@ type ResolvedCustomer = {
  *
  * ক্রম: (১) ইমেইল মিললে সেই অ্যাকাউন্ট, (২) একই ফোনের CUSTOMER অ্যাকাউন্ট,
  * (৩) কিছু না মিললে নতুন User (role=CUSTOMER) + Customer — নাম ও ফোন লিড থেকে।
- * নতুন অ্যাকাউন্টের পাসওয়ার্ড random (কেউ জানে না); Admin "পাসওয়ার্ড রিসেট" দিয়ে
- * কাস্টমারকে পোর্টালের অ্যাক্সেস দেবেন (Phase 5)।
+ * নতুন অ্যাকাউন্টের অস্থায়ী পাসওয়ার্ডটি কনভার্শনের ফলাফলে ফেরত যায়, যাতে Admin
+ * কপি করে কাস্টমারকে দিতে পারেন (PRD সেকশন ৫.৩)।
  */
 async function resolveCustomer(
   tx: Tx,
@@ -139,19 +151,29 @@ async function resolveCustomer(
   };
 }
 
+export type ConvertResult = {
+  projectId: string;
+  phaseCount: number;
+  /** নতুন কাস্টমার অ্যাকাউন্ট হলে — Admin কে একবারই দেখানো হয় */
+  credentials: { email: string; password: string } | null;
+};
+
 /**
- * PRD সেকশন ৫.১ — লিড "Won" এ গেলে অটোমেটিক কনভার্শন।
+ * PRD সেকশন ৫.৩ — লিড "Won" এ গেলে কনস্ট্রাকশন Project তৈরি।
  *
- * এক ট্রানজেকশনে: Customer (না থাকলে নতুন User role=CUSTOMER সহ) → Sale (DRAFT) →
- * Unit স্ট্যাটাস SOLD → Lead স্টেজ WON + টাইমলাইন এন্ট্রি।
- * PaymentPlan এখানে তৈরি হয় না — Accounts/Admin সেট করে সেলটি কনফার্ম করবেন (Phase 4)।
+ * এক ট্রানজেকশনে: Customer (না থাকলে নতুন User role=CUSTOMER সহ) → Project →
+ * গ্লোবাল `PhaseTemplate` থেকে কপি করে Phase গুলো (সব UPCOMING) → Lead স্টেজ WON
+ * + টাইমলাইন এন্ট্রি। PaymentPlan এখানে তৈরি হয় না — Accounts/Admin পরে সেট করবেন
+ * (PRD সেকশন ৫.৫)।
  */
-export async function convertLeadToSale(input: {
+export async function convertLeadToProject(input: {
   leadId: string;
-  unitId: string;
-  totalAmount: string | number;
+  totalContractValue: string | number;
+  ratePerSqft?: string;
+  totalSqft?: string;
+  startDate?: string;
   customerEmail?: string;
-}): Promise<ActionResult<{ saleId: string }>> {
+}): Promise<ActionResult<ConvertResult>> {
   const actor = await getAuthorizedUser('lead:convert');
   if (!actor) return FORBIDDEN;
 
@@ -161,14 +183,16 @@ export async function convertLeadToSale(input: {
     return {
       ok: false,
       message:
-        fieldErrors.unitId ??
-        fieldErrors.totalAmount ??
+        fieldErrors.totalContractValue ??
+        fieldErrors.ratePerSqft ??
+        fieldErrors.totalSqft ??
         fieldErrors.customerEmail ??
         'ইনপুট সঠিক নয়',
       fieldErrors,
     };
   }
-  const { leadId, unitId, totalAmount, customerEmail } = parsed.data;
+  const { leadId, totalContractValue, ratePerSqft, totalSqft, startDate, customerEmail } =
+    parsed.data;
 
   // scope সহ — অন্যের লিড কনভার্ট করা যাবে না
   const lead = await prisma.lead.findFirst({
@@ -180,41 +204,29 @@ export async function convertLeadToSale(input: {
       email: true,
       stage: true,
       assignedToId: true,
-      sale: { select: { id: true } },
+      projectLocation: true,
+      buildingType: true,
+      project: { select: { id: true } },
     },
   });
   if (!lead) return NOT_FOUND;
 
-  if (lead.sale) {
-    return { ok: false, message: 'এই লিডের জন্য সেল আগেই তৈরি হয়েছে' };
+  if (lead.project) {
+    return { ok: false, message: 'এই লিডের জন্য প্রজেক্ট আগেই তৈরি হয়েছে' };
   }
 
-  const unit = await prisma.unit.findUnique({
-    where: { id: unitId },
-    select: {
-      id: true,
-      unitNo: true,
-      status: true,
-      project: { select: { id: true, name: true } },
-      sale: { select: { id: true } },
-    },
+  // Lead → Project কনভার্শনে ফেজগুলো গ্লোবাল টেমপ্লেট থেকে কপি হয় (v2)
+  const templates = await prisma.phaseTemplate.findMany({
+    select: { name: true, order: true, defaultDurationDays: true },
+    orderBy: { order: 'asc' },
   });
-  if (!unit) {
-    return {
-      ok: false,
-      message: 'ইউনিটটি খুঁজে পাওয়া যায়নি',
-      fieldErrors: { unitId: 'ইউনিটটি নেই' },
-    };
-  }
-  if (unit.sale || unit.status === UnitStatus.SOLD) {
-    const message = `${unitLabel(unit)} ইতিমধ্যে বিক্রিত — অন্য ইউনিট নির্বাচন করুন`;
-    return { ok: false, message, fieldErrors: { unitId: message } };
-  }
+  const dates = planPhaseDates(templates, startDate);
 
   // bcrypt ইচ্ছাকৃতভাবে ধীর — ট্রানজেকশনের বাইরে হ্যাশ করা হয় যাতে লক বেশিক্ষণ না থাকে
-  const passwordHash = await bcrypt.hash(randomBytes(24).toString('hex'), 10);
-  const amountLabel = formatBDT(totalAmount);
-  const unitName = unitLabel(unit);
+  const tempPassword = generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const title = buildProjectTitle(lead);
+  const amountLabel = formatBDT(totalContractValue);
 
   try {
     const outcome = await prisma.$transaction(async (tx) => {
@@ -225,18 +237,28 @@ export async function convertLeadToSale(input: {
         passwordHash,
       );
 
-      const sale = await tx.sale.create({
+      const project = await tx.project.create({
         data: {
           leadId: lead.id,
-          unitId: unit.id,
           customerId: customer.customerId,
-          totalAmount: new Prisma.Decimal(totalAmount),
-          status: SaleStatus.DRAFT,
+          title,
+          landLocation: lead.projectLocation,
+          buildingType: lead.buildingType,
+          totalSqft: totalSqft === null ? null : new Prisma.Decimal(totalSqft),
+          ratePerSqft: ratePerSqft === null ? null : new Prisma.Decimal(ratePerSqft),
+          totalContractValue: new Prisma.Decimal(totalContractValue),
+          startDate,
+          phases: {
+            create: templates.map((template, index) => ({
+              name: template.name,
+              order: template.order,
+              plannedStart: dates[index].plannedStart,
+              plannedEnd: dates[index].plannedEnd,
+            })),
+          },
         },
         select: { id: true },
       });
-
-      await tx.unit.update({ where: { id: unit.id }, data: { status: UnitStatus.SOLD } });
 
       await tx.lead.update({
         where: { id: lead.id },
@@ -256,33 +278,32 @@ export async function convertLeadToSale(input: {
       timeline.push({
         type: LeadActivityType.NOTE,
         note:
-          `সেল তৈরি হয়েছে (ড্রাফট) — ${unitName} · ${amountLabel} · কাস্টমার: ${customer.customerName}` +
-          (customer.created ? ' (নতুন কাস্টমার অ্যাকাউন্ট)' : '') +
-          ' · পেমেন্ট প্ল্যান Accounts/Admin কনফার্ম করবেন',
+          `প্রজেক্ট তৈরি হয়েছে — ${title} · কন্ট্রাক্ট ভ্যালু ${amountLabel} · ` +
+          `${templates.length} টি ফেজ যোগ হয়েছে · কাস্টমার: ${customer.customerName}` +
+          (customer.created ? ' (নতুন কাস্টমার অ্যাকাউন্ট)' : ''),
       });
 
       await tx.leadActivity.createMany({
         data: timeline.map((t) => ({ ...t, leadId: lead.id, createdById: actor.id })),
       });
 
-      return { saleId: sale.id, customer };
+      return { projectId: project.id, customer };
     });
 
-    const { saleId, customer } = outcome;
+    const { projectId, customer } = outcome;
 
     // CLAUDE.md নিয়ম ৪ — critical action গুলোর audit trail
     await logActivity({
-      entityType: 'Sale',
-      entityId: saleId,
+      entityType: 'Project',
+      entityId: projectId,
       userId: actor.id,
-      action: 'SALE_CREATED',
+      action: 'PROJECT_CREATED',
       metadata: {
         leadId: lead.id,
-        unitId: unit.id,
-        projectId: unit.project.id,
         customerId: customer.customerId,
-        totalAmount: String(totalAmount),
-        status: SaleStatus.DRAFT,
+        title,
+        totalContractValue: String(totalContractValue),
+        phaseCount: templates.length,
         customerCreated: customer.created,
       },
     });
@@ -292,47 +313,52 @@ export async function convertLeadToSale(input: {
       entityId: lead.id,
       userId: actor.id,
       action: 'LEAD_CONVERTED',
-      metadata: { from: lead.stage, to: LeadStage.WON, saleId, unitId: unit.id },
+      metadata: { from: lead.stage, to: LeadStage.WON, projectId },
     });
 
-    // Accounts ও Admin — পেমেন্ট প্ল্যান সেট করার জন্য (PRD সেকশন ৫.১: draft mode)
+    // Accounts ও Admin — পেমেন্ট প্ল্যান সেট করার জন্য (PRD সেকশন ৫.৫)
     const reviewers = await prisma.user.findMany({
       where: { active: true, role: { in: [Role.ACCOUNTS, Role.ADMIN] }, id: { not: actor.id } },
       select: { id: true },
     });
     await notifyMany({
       userIds: reviewers.map((r) => r.id),
-      type: 'SALE_DRAFT_CREATED',
-      message: `নতুন সেল (ড্রাফট) — ${lead.name} · ${unitName} · ${amountLabel} · পেমেন্ট প্ল্যান সেট করুন`,
-      link: `/accounts/schedule/${saleId}`,
+      type: 'PROJECT_CREATED',
+      message: `নতুন প্রজেক্ট — ${title} · ${amountLabel} · পেমেন্ট প্ল্যান সেট করুন`,
+      link: `/accounts/schedule/${projectId}`,
     });
 
     revalidatePath('/sales/pipeline');
     revalidatePath('/sales');
     revalidatePath(`/sales/leads/${lead.id}`);
     revalidatePath('/accounts');
+    revalidatePath('/admin/projects');
+
+    const messageParts = [`${lead.name} — প্রজেক্ট তৈরি হয়েছে`];
+    if (templates.length > 0) messageParts.push(`${templates.length} টি ফেজ যোগ হয়েছে`);
+    else messageParts.push('ফেজ টেমপ্লেট খালি — Admin → ফেজ টেমপ্লেট থেকে সেট করুন');
+    if (customer.placeholderEmail) messageParts.push('কাস্টমারের ইমেইল নেই, অস্থায়ী ইমেইল বসানো হয়েছে');
 
     return {
       ok: true,
-      message: customer.placeholderEmail
-        ? `${lead.name} — সেল তৈরি হয়েছে (ড্রাফট)। কাস্টমারের ইমেইল নেই, তাই অস্থায়ী ইমেইল বসানো হয়েছে।`
-        : `${lead.name} — সেল তৈরি হয়েছে (ড্রাফট)। পেমেন্ট প্ল্যান বাকি।`,
-      data: { saleId },
+      message: messageParts.join(' · '),
+      data: {
+        projectId,
+        phaseCount: templates.length,
+        // পাসওয়ার্ডটি শুধু নতুন অ্যাকাউন্টেই অর্থবহ — পুরনো কাস্টমারের পাসওয়ার্ড
+        // বদলানো হয়নি, তাই সেখানে কিছু দেখানোরও নেই
+        credentials: customer.created
+          ? { email: customer.email, password: tempPassword }
+          : null,
+      },
     };
   } catch (error) {
     if (error instanceof ConvertError) return error.result;
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       const target = String(error.meta?.target ?? '');
-      if (target.includes('unitId')) {
-        return {
-          ok: false,
-          message: `${unitName} ইতিমধ্যে বিক্রিত — অন্য ইউনিট নির্বাচন করুন`,
-          fieldErrors: { unitId: 'ইউনিটটি আর খালি নেই' },
-        };
-      }
       if (target.includes('leadId')) {
-        return { ok: false, message: 'এই লিডের জন্য সেল আগেই তৈরি হয়েছে' };
+        return { ok: false, message: 'এই লিডের জন্য প্রজেক্ট আগেই তৈরি হয়েছে' };
       }
       if (target.includes('email')) {
         return {
@@ -343,7 +369,7 @@ export async function convertLeadToSale(input: {
       }
     }
 
-    console.error('convertLeadToSale failed', error);
-    return { ok: false, message: 'সেল তৈরি করা যায়নি' };
+    console.error('convertLeadToProject failed', error);
+    return { ok: false, message: 'প্রজেক্ট তৈরি করা যায়নি' };
   }
 }

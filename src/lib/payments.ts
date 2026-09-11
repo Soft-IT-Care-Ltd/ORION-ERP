@@ -67,21 +67,24 @@ export const METHOD_NOTE_HINT: Partial<Record<PaymentMethod, string>> = {
 /* ------------------------------------------------------------ template */
 
 /**
- * PRD সেকশন ৫.৩ এর স্যাম্পল পেমেন্ট প্ল্যান।
+ * PRD সেকশন ৫.৫ এর স্যাম্পল পেমেন্ট প্ল্যান (কনস্ট্রাকশন কন্ট্রাক্ট)।
  *
- * খেয়াল রাখুন: PRD টেবিলের শতাংশগুলো যোগ করলে ৯০% হয় (5+15+10+50+10)। তাই
  * হ্যান্ডওভারের কিস্তিটি এখানে **অবশিষ্ট (balance)** হিসেবে ধরা হয় — "Handover এ
- * বাকি" — যাতে প্ল্যানের যোগফল সবসময় ঠিক সেল ভ্যালুর সমান হয় এবং রাউন্ডিংয়ের
- * খুচরো টাকাও কোথাও হারিয়ে না যায়। ডিফল্ট মানগুলোতে হ্যান্ডওভারে পড়ে ২০%;
- * বিল্ডারে হার বদলে ১০% করা যায় (যেমন মাসিক ৩% বা ১৬টি কিস্তি)।
+ * বাকি" — যাতে প্ল্যানের যোগফল সবসময় ঠিক কন্ট্রাক্ট ভ্যালুর সমান হয় এবং
+ * রাউন্ডিংয়ের খুচরো টাকাও কোথাও হারিয়ে না যায়। ডিফল্ট মানগুলোতে হ্যান্ডওভারে
+ * পড়ে ২০%; বিল্ডারে হার বদলে অন্য রকমও করা যায়।
+ *
+ * টেমপ্লেটটি সময়-ভিত্তিক; PRD এর ফেজ-ভিত্তিক তালিকা (Foundation Complete,
+ * 1st Floor Structure …) বানাতে বিল্ডারের "হাতে এডিট" মোডে প্রতিটি কিস্তির
+ * সঙ্গে ফেজ লিংক করে দিন।
  */
 export const DEFAULT_PLAN_TEMPLATE = {
   bookingPercent: 5,
   downPaymentPercent: 15,
-  /** বুকিংয়ের কত দিন পরে ডাউন পেমেন্ট (PRD: "৩০ দিনের মধ্যে") */
+  /** সাইনআপের কত দিন পরে mobilization advance */
   downPaymentDays: 30,
   agreementPercent: 10,
-  /** বুকিং থেকে সেল এগ্রিমেন্ট পর্যন্ত ডিফল্ট ব্যবধান */
+  /** সাইনআপ থেকে কন্ট্রাক্ট সাইনিং পর্যন্ত ডিফল্ট ব্যবধান */
   agreementDays: 60,
   monthlyCount: 20,
   monthlyPercent: 2.5,
@@ -122,7 +125,7 @@ const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 10000) / 100 : 0;
 
 /**
- * টেমপ্লেট থেকে পুরো installment schedule তৈরি (PRD সেকশন ৫.৩)।
+ * টেমপ্লেট থেকে পুরো installment schedule তৈরি (PRD সেকশন ৫.৫)।
  *
  * প্রতিটি কিস্তি পূর্ণ টাকায় রাউন্ড হয়, আর শেষ (হ্যান্ডওভার) কিস্তিতে অবশিষ্ট
  * পুরোটা বসে — তাই `sum(installments) === totalAmount` সবসময় সত্য।
@@ -154,9 +157,9 @@ export function generateSchedule(input: PlanTemplateInput): GeneratedInstallment
     });
   };
 
-  add('Booking Money', bookingDate, bookingPercent);
-  add('Down Payment', addDays(bookingDate, downPaymentDays), downPaymentPercent);
-  add('Sale Agreement Signing', agreementDate, agreementPercent);
+  add('Signup Money', bookingDate, bookingPercent);
+  add('Mobilization Advance', addDays(bookingDate, downPaymentDays), downPaymentPercent);
+  add('Contract Signing', agreementDate, agreementPercent);
 
   for (let i = 0; i < monthlyCount; i += 1) {
     add(
@@ -199,7 +202,7 @@ export function balancePercent(input: {
 }
 
 /**
- * বুকিং তারিখ থেকে বাকি তারিখগুলোর ডিফল্ট — বিল্ডার খোলার সময় প্রি-ফিল হয়,
+ * সাইনআপ তারিখ থেকে বাকি তারিখগুলোর ডিফল্ট — বিল্ডার খোলার সময় প্রি-ফিল হয়,
  * ব্যবহারকারী পরে বদলাতে পারেন।
  */
 export function defaultPlanDates(
@@ -279,7 +282,7 @@ export type AgingRow = {
   bucket: AgingBucket;
   /** বকেয়া কিস্তির সংখ্যা */
   count: number;
-  /** কতগুলো আলাদা সেল/অ্যাকাউন্ট (PRD এর "7 accounts") */
+  /** কতগুলো আলাদা প্রজেক্ট/অ্যাকাউন্ট (PRD এর "7 accounts") */
   accounts: number;
   /** এখনো অনাদায়ী অঙ্ক (কিস্তির মোট নয় — যা বাকি) */
   amount: number;
@@ -321,6 +324,10 @@ export type InstallmentView = {
   /** আজকের তারিখ ধরে হিসাব করা কার্যকর স্ট্যাটাস */
   status: InstallmentStatus;
   overdueDays: number | null;
+  /** কোন ফেজের সঙ্গে বাঁধা (PRD সেকশন ৫.৫) — না থাকলে null */
+  phaseId: string | null;
+  /** ফেজের নাম — শিডিউল টেবিলে কিস্তির নিচে দেখানো হয় */
+  phaseName: string | null;
   payments: PaymentView[];
 };
 
@@ -368,6 +375,8 @@ export type InstallmentRow = {
   dueDate: Date;
   amount: { toString(): string };
   percentage: { toString(): string } | null;
+  phaseId: string | null;
+  phase: { name: string } | null;
   payments: {
     id: string;
     receiptNo: string;
@@ -396,6 +405,8 @@ export function toInstallmentView(row: InstallmentRow, now: Date): InstallmentVi
     remaining: Math.max(0, amount - paidAmount),
     status: computeInstallmentStatus({ amount, dueDate: row.dueDate }, paidAmount, now),
     overdueDays: overdueDays({ amount, dueDate: row.dueDate }, paidAmount, now),
+    phaseId: row.phaseId,
+    phaseName: row.phase?.name ?? null,
     payments: row.payments.map((p) => ({
       id: p.id,
       receiptNo: p.receiptNo,

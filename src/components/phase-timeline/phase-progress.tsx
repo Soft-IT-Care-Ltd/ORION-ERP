@@ -6,7 +6,7 @@ import { PHASE_STATUS_BADGE, PHASE_STATUS_LABEL, type PhaseSummary } from '@/lib
  */
 
 /**
- * লিস্টের সারিতে সরু প্রগ্রেস বার (My Sites, Admin ইউনিট টেবিল)।
+ * লিস্টের সারিতে সরু প্রগ্রেস বার (My Sites, Admin প্রজেক্ট তালিকা)।
  * পুরো টাইমলাইন না দেখিয়েই "কতদূর" বোঝানোর জন্য।
  */
 export function PhaseProgressBar({
@@ -48,7 +48,7 @@ export function PhaseProgressBar({
 
 /**
  * PRD সেকশন ৫.২ — "আপনার প্রজেক্ট ৬৫% সম্পন্ন — বর্তমানে Finishing Phase চলছে"।
- * কাস্টমার পোর্টাল ও ইঞ্জিনিয়ারের ইউনিট পেজে টাইমলাইনের উপরে বসে।
+ * কাস্টমার পোর্টাল ও ইঞ্জিনিয়ারের সাইট পেজে টাইমলাইনের উপরে বসে।
  */
 export function PhaseProgressSummary({
   summary,

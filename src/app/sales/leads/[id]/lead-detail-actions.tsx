@@ -3,48 +3,39 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Loader2, Pencil, Receipt } from 'lucide-react';
+import { HardHat, Loader2, Pencil } from 'lucide-react';
 import type { LeadStage } from '@prisma/client';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { LEAD_STAGES, STAGE_LABEL } from '@/lib/leads';
+import { CONDITIONAL_STAGE_HINT, isConditionalStage, LEAD_STAGES, STAGE_LABEL } from '@/lib/leads';
 import { validate } from '@/lib/validations/form';
 import { changeStageSchema } from '@/lib/validations/lead-base';
 import { changeLeadStage } from '../actions';
-import {
-  LeadFormDialog,
-  type EditableLead,
-  type ExecutiveOption,
-  type UnitOption,
-} from '../lead-form-dialog';
+import { LeadFormDialog, type EditableLead, type ExecutiveOption } from '../lead-form-dialog';
 import { LostReasonDialog } from '../lost-reason-dialog';
-import { WonSaleDialog, type SaleUnitOption } from '../won-sale-dialog';
+import { WonProjectDialog } from '../won-project-dialog';
 
 export function LeadDetailActions({
   lead,
   stage,
   leadName,
   executives,
-  units,
-  saleUnits,
   canAssign,
   canEdit,
   canConvert,
-  hasSale,
+  hasProject,
 }: {
   lead: EditableLead;
   stage: LeadStage;
   leadName: string;
   executives: ExecutiveOption[];
-  units: UnitOption[];
-  saleUnits: SaleUnitOption[];
   canAssign: boolean;
   canEdit: boolean;
-  /** Won → সেল কনভার্শনের অনুমতি (`lead:convert`) */
+  /** Won → প্রজেক্ট কনভার্শনের অনুমতি (`lead:convert`) */
   canConvert: boolean;
-  /** সেল তৈরি হয়ে গেছে — স্টেজ আর বদলানো যাবে না */
-  hasSale: boolean;
+  /** প্রজেক্ট তৈরি হয়ে গেছে — স্টেজ আর বদলানো যাবে না */
+  hasProject: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<LeadStage>(stage);
@@ -87,7 +78,7 @@ export function LeadDetailActions({
       setLostOpen(true);
       return;
     }
-    // PRD সেকশন ৫.১ — Won মানে সেল কনভার্শন (ইউনিট + মূল্য নিশ্চিত করতে হবে)
+    // PRD সেকশন ৫.৩ — Won মানে প্রজেক্ট তৈরি (কন্ট্রাক্ট ভ্যালু নিশ্চিত করতে হবে)
     if (next === 'WON') {
       if (!canConvert) {
         setSelected(stage);
@@ -112,28 +103,31 @@ export function LeadDetailActions({
           <NativeSelect
             id="detail-stage"
             value={selected}
-            disabled={pending || hasSale}
+            disabled={pending || hasProject}
             onChange={(event) => onStagePick(event.target.value as LeadStage)}
             className="w-52"
           >
             {LEAD_STAGES.map((s) => (
               <option key={s} value={s}>
                 {STAGE_LABEL[s]}
+                {isConditionalStage(s) ? ` (${CONDITIONAL_STAGE_HINT})` : ''}
               </option>
             ))}
           </NativeSelect>
           {pending ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
         </div>
-        {hasSale ? (
-          <p className="text-xs text-muted-foreground">সেল তৈরি হয়েছে — স্টেজ পরিবর্তন করা যাবে না</p>
+        {hasProject ? (
+          <p className="text-xs text-muted-foreground">
+            প্রজেক্ট তৈরি হয়েছে — স্টেজ পরিবর্তন করা যাবে না
+          </p>
         ) : null}
       </div>
 
-      {/* Won এ আছে অথচ সেল তৈরি হয়নি (যেমন পুরনো ডেটা) — এখান থেকেই সেরে নেওয়া যায় */}
-      {stage === 'WON' && !hasSale && canConvert ? (
+      {/* Won এ আছে অথচ প্রজেক্ট তৈরি হয়নি (যেমন পুরনো ডেটা) — এখান থেকেই সেরে নেওয়া যায় */}
+      {stage === 'WON' && !hasProject && canConvert ? (
         <Button onClick={() => setWonOpen(true)}>
-          <Receipt className="mr-2 h-4 w-4" />
-          সেল কনফার্ম করুন
+          <HardHat className="mr-2 h-4 w-4" />
+          প্রজেক্ট তৈরি করুন
         </Button>
       ) : null}
 
@@ -147,19 +141,17 @@ export function LeadDetailActions({
         onOpenChange={setEditOpen}
         lead={lead}
         executives={executives}
-        units={units}
         canAssign={canAssign}
       />
 
-      <WonSaleDialog
+      <WonProjectDialog
         open={wonOpen}
         onOpenChange={(open) => {
           setWonOpen(open);
           // বাতিল করলে ড্রপডাউন আগের স্টেজে ফিরে যাবে
           if (!open) setSelected(stage);
         }}
-        lead={{ id: lead.id, name: leadName, email: lead.email, unitId: lead.unitId }}
-        units={saleUnits}
+        lead={{ id: lead.id, name: leadName, email: lead.email }}
       />
 
       <LostReasonDialog

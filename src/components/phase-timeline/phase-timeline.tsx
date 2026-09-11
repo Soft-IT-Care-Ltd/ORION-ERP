@@ -24,7 +24,7 @@ export function PhaseTimeline({
   phases,
   actions,
   showDates = true,
-  emptyMessage = 'এই ইউনিটে এখনো কোনো ফেজ যোগ করা হয়নি',
+  emptyMessage = 'এই প্রজেক্টে এখনো কোনো ফেজ যোগ করা হয়নি',
   className,
 }: {
   phases: PhaseView[];

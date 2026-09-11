@@ -9,6 +9,7 @@ import {
   HardHat,
   Home,
   KanbanSquare,
+  ListChecks,
   Receipt,
   TrendingUp,
   Users,
@@ -44,7 +45,14 @@ export const PANELS: Record<string, Panel> = {
       { label: 'ইউজার ম্যানেজমেন্ট', href: '/admin/users', icon: Users },
       // ADMIN সব লিড দেখে — সেলস প্যানেলের বোর্ডটিই ব্যবহার হয় (ROUTE_ROLES এ অনুমোদিত)
       { label: 'লিড ও পাইপলাইন', href: '/sales/pipeline', icon: KanbanSquare },
-      { label: 'প্রজেক্ট ও ইউনিট', href: '/admin/projects', icon: Building2 },
+      {
+        label: 'প্রজেক্ট',
+        href: '/admin/projects',
+        icon: Building2,
+        matchPrefixes: ['/admin/projects'],
+      },
+      // v2 তে ফেজ টেমপ্লেট গ্লোবাল — Lead → Project কনভার্শনের সময় এখান থেকেই কপি হয়
+      { label: 'ফেজ টেমপ্লেট', href: '/admin/phase-templates', icon: ListChecks },
       { label: 'পেমেন্ট', href: '/admin/payments', icon: Wallet },
       {
         label: 'রিপোর্ট',
@@ -65,8 +73,8 @@ export const PANELS: Record<string, Panel> = {
         icon: KanbanSquare,
         matchPrefixes: ['/sales/leads'],
       },
-      { label: 'ফলো-আপ', href: '/sales/follow-ups', icon: CalendarClock, upcomingPhase: 2 },
-      { label: 'পারফরম্যান্স', href: '/sales/performance', icon: TrendingUp, upcomingPhase: 6 },
+      { label: 'ফলো-আপ', href: '/sales/follow-up', icon: CalendarClock },
+      { label: 'পারফরম্যান্স', href: '/sales/performance', icon: TrendingUp },
     ],
   },
   '/engineer': {
@@ -102,7 +110,7 @@ export const PANELS: Record<string, Panel> = {
     basePath: '/customer',
     title: 'কাস্টমার পোর্টাল',
     items: [
-      { label: 'আমার ইউনিট', href: '/customer', icon: Home },
+      { label: 'আমার প্রজেক্ট', href: '/customer', icon: Home },
       { label: 'নির্মাণ অগ্রগতি', href: '/customer/progress', icon: HardHat },
       { label: 'পেমেন্ট', href: '/customer/payments', icon: CreditCard },
       { label: 'ডকুমেন্ট', href: '/customer/documents', icon: FileText },

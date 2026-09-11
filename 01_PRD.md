@@ -1,37 +1,56 @@
 # Orion Builders CRM/ERP — Product Requirements Document (PRD)
 
 **Prepared for:** M.H. Neshad Al Kafian, Orion Builders
-**Document version:** 1.0
-**Date:** 4 September 2026
+**Document version:** 2.0 (business model correction + pre-project pipeline + accounts ledger + live camera)
+**Date:** 9 September 2026
 
 ---
 
 ## ১. এক নজরে (Executive Summary)
 
-Orion Builders (রিয়েল এস্টেট / কনস্ট্রাকশন কোম্পানি) এর জন্য একটি **end-to-end CRM + ERP সিস্টেম**, যা লিড জেনারেশন থেকে শুরু করে প্রজেক্ট ডেলিভারি পর্যন্ত পুরো business cycle একটি সিঙ্গেল প্ল্যাটফর্মে চালাবে।
+Orion Builders একটি **কনস্ট্রাকশন সার্ভিস কোম্পানি** — ক্লায়েন্টের নিজের জমিতে বাড়ি (ডুপ্লেক্স, ১-তলা থেকে ৫+ তলা) নির্মাণ করে দেয়। Orion কোনো ফ্ল্যাট/জমি বিক্রি করে না (ভবিষ্যতে cash flow ভালো হলে land-share/flat-sale মডেলে যাওয়ার পরিকল্পনা আছে, কিন্তু **এখনকার সফটওয়্যার শুধু কনস্ট্রাকশন সার্ভিস মডেলের জন্য**)।
 
-**Core idea:** একটি লিড → পাইপলাইনে মুভ করবে → সেলস কনভার্ট হলে অটোমেটিক্যালি একটি **Project + Customer + Payment Schedule** তৈরি হবে → প্রজেক্ট তার কনস্ট্রাকশন ফেজ অনুযায়ী এগোবে → কাস্টমার নিজের পোর্টালে payment ও progress দেখতে পাবে।
+এই CRM/ERP ক্লায়েন্টের প্রথম যোগাযোগ থেকে শুরু করে বাড়ি হস্তান্তর পর্যন্ত পুরো process একটি সিঙ্গেল প্ল্যাটফর্মে চালাবে।
 
-মোট ৪টি role-based panel:
+**Core flow:**
+
+```
+Lead (ইনকোয়ারি) → Pre-Project Pipeline (সাইট ভিজিট → সার্ভে → সয়েল টেস্ট →
+ডিজাইন → অনুমোদন → কোটেশন → গভঃ অনুমোদন) → Won (প্রথম কনস্ট্রাকশন পেমেন্ট পাওয়া)
+   → Project তৈরি (ফেজ-ভিত্তিক টাইমলাইন + পেমেন্ট শিডিউল)
+   → কনস্ট্রাকশন চলাকালীন সাইট ফটো + লাইভ CC ক্যামেরা
+   → হ্যান্ডওভার
+```
+
+প্রতিটি ধাপে **client-wise accounting** চলবে (কোন ক্লায়েন্টের জন্য কত খরচ করলাম, কত পেলাম, লাভ/ক্ষতি কত) — এটা Lead পর্যায় থেকেই শুরু হয় (site visit, survey, soil test, design, govt approval এর বিলিং), Project শুরু হওয়ার পরেও চলতে থাকে।
+
+মোট ৫টি role-based panel:
 
 | Panel | ব্যবহারকারী | মূল কাজ |
 |---|---|---|
 | **Admin/Management Panel** | Neshad / management | পুরো সিস্টেম কনফিগার, সব ডেটা দেখা, রিপোর্ট, ইউজার/রোল ম্যানেজমেন্ট |
-| **Sales/Marketing Panel** | Marketing Executive | লিড অ্যাড, পাইপলাইন ম্যানেজ, ফলো-আপ, কনভার্সন |
-| **Engineer/Site Panel** | Site Engineer | ফেজ আপডেট, সাইট ফটো/প্রোগ্রেস আপলোড, ম্যাটেরিয়াল/মাইলস্টোন রিপোর্ট |
-| **Customer Panel** | ক্রেতা/গ্রাহক | নিজের প্রজেক্টের progress, payment history, ডকুমেন্ট, ইনভয়েস দেখা |
+| **Sales/Marketing Panel** | Marketing Executive | লিড অ্যাড, প্রি-প্রজেক্ট পাইপলাইন ম্যানেজ, ফলো-আপ, কনভার্সন |
+| **Engineer/Site Panel** | Site Engineer | ফেজ আপডেট, সাইট ফটো/প্রোগ্রেস আপলোড |
+| **Accounts Panel** | Accounts/Finance | ক্লায়েন্ট-ভিত্তিক ও কোম্পানি-ভিত্তিক লেজার, বিলিং, রিসিট |
+| **Customer Panel** | ক্লায়েন্ট | নিজের প্রজেক্টের progress, লাইভ ক্যামেরা, payment history, ডকুমেন্ট |
 
 ---
 
-## ২. Business Context
+## ২. Business Context (সংশোধিত)
 
-Orion Builders মূলত real estate development / construction business — জমি বা প্রজেক্ট নিয়ে ফ্ল্যাট/প্লট/ভবন তৈরি করে বিক্রি ও ডেলিভারি দেয়। এই ধরনের ব্যবসার জন্য সাধারণ operational চাহিদাগুলো:
+**⚠️ গুরুত্বপূর্ণ সংশোধন:** Orion Builders রিয়েল এস্টেট ডেভেলপার না — কোনো ফ্ল্যাট/ইউনিট "বিক্রির জন্য" ইনভেন্টরি নেই। প্রতিটি ক্লায়েন্টের **নিজস্ব জমি** থাকে, Orion সেই জমিতে তার চাহিদামতো বাড়ি (ডুপ্লেক্স / ১-তলা / ৩-তলা / ৫-তলা ইত্যাদি) **নির্মাণ করে দেওয়ার সার্ভিস** বিক্রি করে — per-sq-ft রেট + সংশ্লিষ্ট খরচ ধরে একটা কনস্ট্রাকশন কন্ট্রাক্ট। (ভবিষ্যতে cash flow ভালো হলে নিজেরা জমি/ফ্ল্যাট কিনে বিক্রি বা land-share মডেলে যাওয়ার পরিকল্পনা আছে — কিন্তু এটা আলাদা ভবিষ্যৎ ফেজ, বর্তমান সফটওয়্যারে এই মডেল বিল্ড হচ্ছে না)।
 
-- **Lead → Sale funnel**: prospective buyer থেকে booking/agreement পর্যন্ত ট্র্যাকিং
-- **Multi-phase construction timeline**: জমি অধিগ্রহণ থেকে হ্যান্ডওভার পর্যন্ত ধাপ-ভিত্তিক অগ্রগতি
-- **Installment-based payment plan**: booking money, down payment, monthly/quarterly installment, on-completion payment
-- **Multi-stakeholder visibility**: management, sales team, site engineer, এবং customer — প্রত্যেকের আলাদা view দরকার
-- **Document-heavy operations**: booking form, sale deed, allotment letter, payment receipt, progress photo
+তাই প্রতিটি "প্রজেক্ট" মানে **একজন নির্দিষ্ট ক্লায়েন্টের একটা কনস্ট্রাকশন জব** — কোনো multi-unit ইনভেন্টরি না, এক ক্লায়েন্ট = এক প্রজেক্ট।
+
+**সাধারণ operational চাহিদা:**
+
+- **Lead → Won funnel**: ইনকোয়ারি থেকে শুরু করে কন্ট্রাক্ট সাইন/প্রথম কনস্ট্রাকশন পেমেন্ট পর্যন্ত — মাঝে অনেকগুলো ধাপ (সাইট ভিজিট, সার্ভে, সয়েল টেস্ট, ডিজাইন, অনুমোদন, কোটেশন, গভঃ পারমিশন) — প্রতিটাই আলাদা করে ট্র্যাক ও বিল করা লাগে
+- **Pre-project billing**: Won হওয়ার আগেই কিছু সার্ভিসের জন্য (সয়েল টেস্ট, ডিজাইন, গভঃ অনুমোদন) ক্লায়েন্ট থেকে চার্জ নেওয়া হয় — এগুলো client-wise ও company-wide দুই জায়গাতেই হিসাবে থাকা লাগবে
+- **Client-wise profit/loss**: প্রতিটা ক্লায়েন্টের জন্য কত খরচ হলো (internal cost, ক্লায়েন্ট দেখবে না) বনাম কত টাকা নেওয়া হলো (client-facing bill) — এর থেকে লাভ/ক্ষতি
+- **Multi-phase construction timeline**: ফাউন্ডেশন থেকে হ্যান্ডওভার পর্যন্ত ধাপ-ভিত্তিক অগ্রগতি, প্রতি ফেজের সাথে পেমেন্ট ও তারিখ বাঁধা
+- **Live site visibility**: সাইট ফটো আপডেট + ভবিষ্যতে লাইভ CC ক্যামেরা ফিড ক্লায়েন্ট পোর্টালে
+- **Multi-stakeholder visibility**: management, sales, site engineer, accounts, customer — প্রত্যেকের আলাদা view
+- **Document-heavy operations**: ফ্লোর প্ল্যান, ৩D ডিজাইন, প্রপোজাল, জমির দলিল, কন্ট্রাক্ট, গভঃ অনুমোদন কপি, রিসিট
 
 ---
 
@@ -40,10 +59,12 @@ Orion Builders মূলত real estate development / construction business — 
 | Goal | Metric (উদাহরণ, ডেটা-ভিত্তিক) |
 |---|---|
 | লিড লিকেজ কমানো | Lead → Site Visit conversion rate ট্র্যাক (target: বর্তমান ~15-20% থেকে 30%+) |
-| সেলস সাইকেল দ্রুত করা | Lead creation থেকে Booking পর্যন্ত average days (target: baseline vs পরবর্তী ৩ মাস তুলনা) |
+| সেলস সাইকেল দ্রুত করা | Lead creation থেকে Won (প্রথম পেমেন্ট) পর্যন্ত average days |
+| Pre-project stage bottleneck চেনা | কোন stage এ (সয়েল টেস্ট/ডিজাইন approval/কোটেশন) সবচেয়ে বেশি সময় লাগছে/লিড আটকে থাকছে |
 | Payment collection সময়মতো করা | Overdue installment % (target: <10% accounts 15+ দিন overdue) |
 | প্রজেক্ট ডিলে কমানো | Phase-wise planned vs actual completion date variance (দিন হিসেবে) |
-| কাস্টমার satisfaction | Customer portal login/engagement rate, complaint resolution TAT |
+| Client-wise profitability | প্রতি ক্লায়েন্টের actual margin % (billed − internal cost) ট্র্যাক |
+| কাস্টমার satisfaction | Customer portal login/engagement rate, লাইভ ক্যামেরা ব্যবহারের হার |
 
 ---
 
@@ -54,22 +75,29 @@ Orion Builders মূলত real estate development / construction business — 
 | Lead create/edit | ✅ Full | ✅ নিজের লিড | ❌ | ❌ | ❌ |
 | সব লিড দেখা | ✅ | ❌ (শুধু assigned) | ❌ | ❌ | ❌ |
 | Pipeline stage change | ✅ | ✅ (নিজের) | ❌ | ❌ | ❌ |
-| Project তৈরি (lead→project convert) | ✅ | ✅ (approval সহ, optional) | ❌ | ❌ | ❌ |
+| Pre-project service billing (site visit/survey/soil test/design/govt approval) | ✅ | ❌ (শুধু অনুরোধ করতে পারবে) | ❌ | ✅ | ❌ |
+| Lead/Client cost এন্ট্রি (internal, client-invisible) | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Project তৈরি (Lead→Project convert) | ✅ | ✅ (approval সহ, optional) | ❌ | ❌ | ❌ |
 | Phase/milestone আপডেট | ✅ | ❌ | ✅ (assigned project) | ❌ | ❌ (শুধু দেখা) |
+| Live camera URL সেট | ✅ | ❌ | ❌ | ❌ | ❌ (শুধু দেখা) |
 | Payment plan সেট/এডিট | ✅ | ❌ | ❌ | ✅ | ❌ (শুধু দেখা) |
 | Payment received entry | ✅ | ❌ | ❌ | ✅ | ❌ |
-| ইনভয়েস/রিসিট জেনারেট | ✅ | ❌ | ❌ | ✅ | ✅ (download) |
-| ডকুমেন্ট আপলোড/দেখা | ✅ | Lead-related | Site-related | Payment-related | নিজের সব ডকুমেন্ট |
+| ইনভয়েস/রিসিট জেনারেট + WhatsApp সেন্ড | ✅ | ❌ | ❌ | ✅ | ✅ (download only) |
+| Main Accounts / Company Ledger | ✅ Full | ❌ | ❌ | ✅ Full | ❌ |
+| Client-wise profit/loss রিপোর্ট | ✅ | ❌ | ❌ | ✅ | ❌ (কখনোই cost দেখবে না) |
+| ডকুমেন্ট আপলোড/দেখা | ✅ | Lead-related | Site-related | Billing-related | নিজের সব ডকুমেন্ট (cost বাদে) |
 | রিপোর্ট/অ্যানালিটিক্স | ✅ Full | নিজের performance | নিজের site progress | Financial reports | ❌ |
 | ইউজার/রোল ম্যানেজমেন্ট | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-> **Note:** RBAC (Role-Based Access Control) database-level এ implement হবে, যাতে ভবিষ্যতে নতুন role (যেমন: Site Supervisor, Legal Officer) সহজে যোগ করা যায়।
+> **নিরাপত্তা নীতি (গুরুত্বপূর্ণ):** internal cost/expense কখনোই customer role এর কোনো API/UI তে expose হবে না — client শুধু তাকে দেওয়া বিল (income entries) ও রিসিট দেখবে, কখনো Orion এর খরচ না। এটা backend এ query-level এ enforce করতে হবে (শুধু UI hide না)।
+
+> **Note:** RBAC (Role-Based Access Control) database-level এ implement হবে।
 
 ---
 
 ## ৫. Core Modules — বিস্তারিত
 
-### ৫.১ Lead Management & Sales Pipeline
+### ৫.১ Lead Management & Pre-Project Pipeline
 
 **Lead source (উদাহরণ):** Facebook Ads, Website form, Walk-in, Referral, Cold call, Property fair/exhibition
 
@@ -82,22 +110,44 @@ Orion Builders মূলত real estate development / construction business — 
 | Residence Country | enum/text | UAE |
 | Email | text | rafiqul@example.com |
 | Source | enum | Facebook Ads |
-| Interested Project/Unit | FK | "Orion Green, Khulna — Flat B-4" |
 | Project/Land Location | text | "সোনাডাঙ্গা, খুলনা — নিজস্ব জমি" |
-| Budget Range | number | ৳45–55 লাখ |
+| Land Size | text/number | ৪ কাঠা |
+| Building Type | enum | Duplex / 1-Story / 2-Story / 3-Story / 4-Story / 5+ Story / Other |
+| Estimated Budget Range | number | ৳45–55 লাখ |
 | Assigned To | FK (user) | Marketing Executive — Sohel |
 | Stage | enum | নিচে দেখুন |
 | Next Follow-up Date | date | 10 Sep 2026 |
 | Notes/Activity log | text[] | timestamped notes |
-| Local Contact Name | text | মোঃ করিম (ভাই) |
-| Local Contact Phone | text | 01711-XXXXXX |
-| Local Contact Relation | text | ভাই / বন্ধু / আত্মীয় |
+| Local Contact Name/Phone/Relation | text | প্রবাসী ক্লায়েন্টের বাংলাদেশে থাকা যোগাযোগের ব্যক্তি |
 
-> **প্রবাসী-কেন্দ্রিক নোট:** যেহেতু Orion Builders এর বড় অংশ প্রবাসী ক্লায়েন্ট (তারা বিদেশ থেকে দেশের নম্বরে না, নিজেদের দেশের নম্বর দেয়, এবং যোগাযোগের সুবিধার জন্য বাংলাদেশে থাকা পরিচিত কারো নম্বর/নাম দিয়ে যায়) — তাই ফোন নম্বর ফিল্ড অবশ্যই international format (country code সহ) সাপোর্ট করবে, এবং লিডের সাথে একটা **Local Contact** (বাংলাদেশে থাকা পরিচিত ব্যক্তি) রেকর্ড রাখা হবে যাকে দিয়ে যোগাযোগ করা যায়। "Project/Land Location" ফিল্ডে ক্লায়েন্টের জমি/প্রজেক্টের প্রকৃত অবস্থান (জেলা/উপজেলা/এলাকা) রাখা হবে।
+**Pipeline stages (Kanban-style board) — কনস্ট্রাকশন সার্ভিসের বাস্তব ওয়ার্কফ্লো অনুযায়ী:**
+
+```
+Inquiry (নতুন ইনকোয়ারি)
+   → Discussion (কথা চলছে, প্রাথমিক আলোচনা)
+   → Site Visit Scheduled → Site Visit Done
+   → Digital Survey (বড় জমি হলে — conditional)
+   → Soil Test (বহুতল ভবন হলে — conditional, বিলযোগ্য)
+   → Design In Progress
+   → Design Approved (ক্লায়েন্ট অনুমোদন দিয়েছে)
+   → Quotation Sent (per-sq-ft রেট + costing পাঠানো হয়েছে)
+   → Govt Approval (RAJUK/City Corporation/Pourashava — conditional, বিলযোগ্য)
+   → Negotiation
+   → Won (কন্ট্রাক্ট সাইন + প্রথম কনস্ট্রাকশন পেমেন্ট পাওয়া গেছে → Project তৈরি হবে)
+                                                              ↘ Lost (যেকোনো stage থেকে, reason সহ)
+```
+
+> **নোট:** সব ক্লায়েন্টের জন্য সব stage প্রযোজ্য নাও হতে পারে (ছোট জমি হলে Digital Survey লাগবে না, ১-তলা হলে Soil Test নাও লাগতে পারে) — তাই stage flow strictly linear না, টিম প্রয়োজন অনুযায়ী skip করতে পারবে, কিন্তু বোর্ডে stage-এর ক্রম উপরের অর্ডার অনুযায়ী দেখানো হবে।
+
+**Checklist / Task tracking (প্রতিটি লিডের সাথে):**
+
+প্রতিটি লিডের ভেতরে একটা checklist থাকবে — কোন কাজ শেষ হয়েছে, কোনটা বাকি, এবং কোন ডকুমেন্ট ক্লায়েন্ট থেকে নেওয়া হয়েছে/আরও কী নেওয়া লাগবে। প্রতিটি checklist item এ: লেবেল (text), status (Pending/Done), optional note, done by + done at।
+
+উদাহরণ আইটেম: "সাইট ভিজিট সম্পন্ন", "জমির দলিলের কপি সংগ্রহ", "সয়েল টেস্ট রিপোর্ট পাওয়া গেছে", "ডিজাইন ক্লায়েন্টকে পাঠানো হয়েছে", "কোটেশন approve হয়েছে" — এগুলো টিম নিজেরাই যোগ/টিক করতে পারবে (fixed list না, flexible)।
 
 **Lead Documents (ফাইল আপলোড):**
 
-প্রতিটি লিডের সাথে একাধিক ফাইল সংযুক্ত করা যাবে — যেমন Floor Plan, 3D Design/Render, Proposal (ক্লায়েন্টকে পাঠানো প্রস্তাবনা), জমির দলিল/ছবি, বা অন্য যেকোনো নথি। প্রতিটি ফাইলের সাথে একটা টাইপ/লেবেল থাকবে যাতে বোঝা যায় এটা কী ধরনের ফাইল।
+প্রতিটি লিডের সাথে একাধিক ফাইল — Floor Plan, 3D Design/Render, Proposal, Land Document, বা অন্য যেকোনো নথি। প্রতিটির সাথে টাইপ/লেবেল।
 
 | Field | Type | উদাহরণ |
 |---|---|---|
@@ -105,133 +155,179 @@ Orion Builders মূলত real estate development / construction business — 
 | File Type | enum | Floor Plan / 3D Design / Proposal / Land Document / Other |
 | Description | text (optional) | "৩ বেড ফ্লোর প্ল্যান, প্রথম ড্রাফট" |
 | Uploaded By | FK (user) | Marketing Executive — Sohel |
-| Uploaded At | datetime | 12 Sep 2026 |
-
-**Pipeline stages (Kanban-style board):**
-
-```
-New Lead → Contacted → Site Visit Scheduled → Site Visit Done
-   → Negotiation → Booking (Advance Paid) → Sale Agreement Signed → Won (Converted to Project)
-                                                                  ↘ Lost (with reason)
-```
 
 **Lost reason (mandatory dropdown):** Price too high, Chose competitor, Location mismatch, Financing issue, No response, Other
 
-**Automation rules (উদাহরণ):**
+**Automation rules:**
 - ৭ দিন কোনো follow-up না হলে → assigned marketing executive কে reminder notification
-- "Won" stage এ move করলে → system automatically একটি **Project + Customer profile + default Payment Schedule** তৈরি করবে (draft mode, admin/accounts কনফার্ম করবে)
+- "Won" stage এ move করলে → Project তৈরি করার ফর্ম খুলবে (নিচে ৫.৩ দেখুন)
 
 **Sales funnel example (ডেটা-উদাহরণ, মাসিক):**
 
-| Stage | Lead Count | Conversion থেকে পরের স্টেজ |
+| Stage | Lead Count | পরের স্টেজে conversion |
 |---|---|---|
-| New Lead | 200 | 60% |
-| Contacted | 120 | 65% |
-| Site Visit Done | 78 | 45% |
-| Negotiation | 35 | 40% |
-| Booking | 14 | 85% |
-| Won (Converted) | 12 | — |
+| Inquiry | 200 | 60% |
+| Site Visit Done | 120 | 55% |
+| Design Approved | 66 | 50% |
+| Quotation Sent | 33 | 45% |
+| Won | 15 | — |
 
-এই ধরনের funnel report Admin dashboard এ মাসিক/quarterly ভিত্তিতে দেখা যাবে।
+### ৫.২ Pre-Project Services & Client Billing (Won হওয়ার আগে)
 
-### ৫.২ Project & Construction Phase Management
+Lead এখনো "Project" না হলেও, কিছু সার্ভিসের জন্য ক্লায়েন্ট থেকে টাকা নেওয়া হয় — এগুলো লিডের সাথেই client-wise হিসাবে থাকবে।
 
-প্রতিটি প্রজেক্ট (বা প্রজেক্টের একটি ইউনিট/ফ্ল্যাট) একটি **phase-based timeline** অনুসরণ করবে। Default phase template (customizable):
+**সার্ভিস টাইপ ও সাধারণ বিলিং নীতি (এডজাস্টেবল, ডিফল্ট না বাধ্যতামূলক):**
+
+| Service | ডিফল্ট | নোট |
+|---|---|---|
+| Site Visit | সাধারণত Free | মাঝেমধ্যে বিল করা যায় (দূরবর্তী স্থান হলে) |
+| Digital Survey | সাধারণত Free | বড় জমির ক্ষেত্রে মাঝেমধ্যে বিল করা যায় |
+| Soil Test | চার্জযোগ্য | বহুতল ভবনে বাধ্যতামূলক |
+| Design | চার্জযোগ্য | |
+| Govt Approval (RAJUK/City Corp/Pourashava) | চার্জযোগ্য | |
+| Other | কেস-বাই-কেস | |
+
+**প্রতিটি বিলিং এন্ট্রিতে:**
+- Service type, amount charged (client কে যা বিল করা হলো), তারিখ, রিসিট নম্বর (auto-generate)
+- রিসিট PDF জেনারেট হবে এবং **"Send via WhatsApp"** বাটনে ক্লিক করলে (MVP: `wa.me` deep-link দিয়ে prefilled মেসেজ + ম্যানুয়ালি রিসিট অ্যাটাচ — পরে ফেজে চাইলে 360dialog WhatsApp Business API দিয়ে সরাসরি auto-send integrate করা যাবে)
+
+**প্রতিটি ইন্টারনাল cost এন্ট্রি (client দেখবে না):**
+- একই সার্ভিসের বিপরীতে Orion এর প্রকৃত খরচ (যেমন সয়েল টেস্ট ভেন্ডরকে দেওয়া টাকা) — এটা শুধু Admin/Accounts দেখবে
+
+এই দুই ধরনের এন্ট্রি (client-facing income + internal cost) মিলিয়ে প্রতিটি Lead/Client এর জন্য একটা **profit/loss summary** তৈরি হবে — লিড এখনো Won না হলেও।
+
+### ৫.৩ Lead → Project Conversion (Won)
+
+Lead "Won" হয় যখন ক্লায়েন্টের সাথে কন্ট্রাক্ট সাইন হয় এবং কনস্ট্রাকশনের প্রথম পেমেন্ট (সাইনআপ মানি) পাওয়া যায় — তখনই একটা **Project** তৈরি হয়।
+
+Project তৈরির ফর্মে থাকবে:
+- Total Contract Value, Rate per sq ft, Total sq ft, Start Date
+- Customer profile তৈরি/লিংক (Lead এর তথ্য থেকে prefill)
+- Default Phase template থেকে Phase গুলো তৈরি হবে (নিচে ৫.৪)
+- Payment Plan/Installment শিডিউল সেট করা যাবে (৫.৫)
+
+Project তৈরি হওয়ার পর থেকে Lead এর সব আগের হিসাব (pre-project billing, cost) এবং নতুন Project এর হিসাব — সব একই ক্লায়েন্টের প্রোফাইলে (leadId ধরে) একসাথে দেখা যাবে।
+
+### ৫.৪ Project & Construction Phase Management
+
+Project তৈরি হওয়ার পর একটা **phase-based timeline** অনুসরণ করবে। যেহেতু জমি অধিগ্রহণ/ডিজাইন/গভঃ অনুমোদন এখন Pre-Project Pipeline এ হয়ে যায় (৫.১-৫.৩), Project এর ফেজ শুরু হয় নির্মাণ কাজ থেকে:
 
 | # | Phase | Typical Duration (উদাহরণ) | Owner |
 |---|---|---|---|
-| 1 | Land Acquisition / Approval | 30–60 দিন | Admin/Legal |
-| 2 | Design & Municipal Approval (RAJUK/KDA) | 45–90 দিন | Admin |
-| 3 | Foundation Work | 30–45 দিন | Site Engineer |
-| 4 | Structure (Column/Beam/Slab, floor-by-floor) | 6–12 মাস | Site Engineer |
-| 5 | Brick Work & Plaster | 2–3 মাস | Site Engineer |
-| 6 | Electrical, Plumbing, Sanitary | 1–2 মাস | Site Engineer |
-| 7 | Finishing (Tiles, Paint, Fittings) | 2–3 মাস | Site Engineer |
-| 8 | Final Inspection & Handover | 15–30 দিন | Admin + Engineer |
+| 1 | Site Mobilization / Set-up | ৫–১০ দিন | Site Engineer |
+| 2 | Foundation Work | ৩০–৪৫ দিন | Site Engineer |
+| 3 | Structure (Column/Beam/Slab, floor-by-floor) | ৬–১২ মাস (তলা সংখ্যা অনুযায়ী) | Site Engineer |
+| 4 | Brick Work & Plaster | ২–৩ মাস | Site Engineer |
+| 5 | Electrical, Plumbing, Sanitary | ১–২ মাস | Site Engineer |
+| 6 | Finishing (Tiles, Paint, Fittings) | ২–৩ মাস | Site Engineer |
+| 7 | Final Inspection & Handover | ১৫–৩০ দিন | Admin + Engineer |
 
-প্রতিটি phase এ থাকবে: **Planned Start/End Date, Actual Start/End Date, % Complete, Site Photos, Remarks, Delay Reason (যদি থাকে)।**
+প্রতিটি phase এ: **Planned Start/End Date, Actual Start/End Date, % Complete, Site Photos, Remarks, Delay Reason, এবং ঐ ফেজে বাঁধা Payment Amount (যদি থাকে)।**
 
-Site Engineer প্যানেল থেকে মোবাইল ব্রাউজারে সরাসরি:
-- % complete আপডেট (slider/dropdown: 0/25/50/75/100%)
-- সাইট ফটো আপলোড (geo-tagged/timestamp optional)
-- Material request / issue log
+Site Engineer প্যানেল থেকে মোবাইল ব্রাউজারে সরাসরি: % complete আপডেট, সাইট ফটো আপলোড, Material request/issue log।
 
-**Customer এর প্যানেলে** এই একই timeline একটি visual progress bar আকারে দেখাবে (যেমন: "আপনার প্রজেক্ট ৬৫% সম্পন্ন — বর্তমানে Finishing Phase চলছে")।
+**Live CC Camera (নতুন ফিচার):** প্রতিটি Project এ একটা Camera Stream URL ফিল্ড থাকবে (Admin সেট করবে — ভেন্ডরের শেয়ার লিংক বা HLS/RTMP স্ট্রিম URL)। Customer পোর্টালে এই লাইভ ফিড embed করে দেখানো হবে (MVP: iframe embed বা HLS player — hardware/camera vendor integration এই সফটওয়্যারের স্কোপের বাইরে, শুধু admin manually stream URL বসাবে)।
 
-### ৫.৩ Payment Plan & Schedule
+**Customer এর প্যানেলে:** phase timeline visual progress bar + সাইট ফটো গ্যালারি + লাইভ ক্যামেরা (যদি URL সেট করা থাকে)।
 
-**Payment plan structure (উদাহরণ — ৳50 লাখ ফ্ল্যাটের জন্য):**
+### ৫.৫ Payment Plan & Schedule (Project-ভিত্তিক)
 
-| Installment | % | Amount (৳) | Due Date | Status |
+**Payment plan structure (উদাহরণ — একটা ৩-তলা বাড়ির কনস্ট্রাকশন কন্ট্রাক্টের জন্য):**
+
+| Installment | ফেজ | Amount (৳) | Due Date | Status |
 |---|---|---|---|---|
-| Booking Money | 5% | 2,50,000 | Booking date | Paid |
-| Down Payment (30 দিনের মধ্যে) | 15% | 7,50,000 | Booking + 30 days | Paid |
-| Sale Agreement Signing | 10% | 5,00,000 | Agreement date | Pending |
-| Installment 1–20 (মাসিক) | প্রতিটি 2.5% | 1,25,000 x 20 | Monthly | Scheduled |
-| On Handover | 10% (balance) | 5,00,000 | Handover date | Scheduled |
+| Signup Money (কন্ট্রাক্ট সাইনিং) | — | ৫,০০,০০০ | সাইনিং তারিখ | Paid |
+| Foundation Complete | Foundation Work | ৮,০০,০০০ | ফেজ শুরুর ৪৫ দিন পর | Pending |
+| 1st Floor Structure | Structure | ৬,০০,০০০ | | Scheduled |
+| 2nd Floor Structure | Structure | ৬,০০,০০০ | | Scheduled |
+| Brick & Plaster Complete | Brick Work & Plaster | ৫,০০,০০০ | | Scheduled |
+| Electrical/Plumbing Complete | Electrical, Plumbing | ৪,০০,০০০ | | Scheduled |
+| Finishing 50% | Finishing | ৫,০০,০০০ | | Scheduled |
+| On Handover | Handover | ৩,০০,০০০ (বাকি) | | Scheduled |
+
+প্রতিটি Installment ঐচ্ছিকভাবে একটা নির্দিষ্ট Phase এর সাথে লিংক করা যাবে (যাতে "এই ফেজ শেষ হলে এত টাকা দিতে হবে" — timeline এ একসাথে দেখা যায়)।
 
 **Payment module features:**
-- Custom payment plan template তৈরি (প্রজেক্ট-ভেদে ভিন্ন হতে পারে)
+- Custom payment plan তৈরি (প্রজেক্ট-ভেদে ভিন্ন হতে পারে, phase-linked)
 - প্রতিটি installment এ due date, amount, status (Paid/Partial/Overdue/Scheduled)
-- Auto-reminder: due date এর 7 দিন আগে ও overdue হলে SMS/Email/WhatsApp notification (customer + accounts কে)
-- Payment receive entry (cash/bank/mobile banking — bKash, Nagad উল্লেখসহ) → auto invoice/receipt generate
+- Auto-reminder: due date এর 7 দিন আগে ও overdue হলে notification
+- Payment receive entry (Cash/Bank/bKash/Nagad/Cheque) → auto invoice/receipt generate + WhatsApp send অপশন
 - Overdue aging report (0-15 days, 16-30, 30+)
 
-**Dashboard KPI (উদাহরণ):**
+### ৫.৬ Accounts & Ledger (নতুন মডিউল)
 
-| Metric | Value (sample) |
-|---|---|
-| Total Receivable (এই মাসে due) | ৳42,50,000 |
-| Collected | ৳38,00,000 (89%) |
-| Overdue (15+ দিন) | ৳4,50,000 (7 accounts) |
+দুই স্তরে হিসাব:
 
-### ৫.৪ Customer Portal
+**১. Client-wise Ledger** — প্রতিটি ক্লায়েন্টের (Lead থেকে শুরু করে, Project হয়ে গেলেও একই লিংকে) জন্য:
+   - Income entries: pre-project service বিল (৫.২) + construction installment payments (৫.৫) — সব ক্লায়েন্টকে দেখানো হবে (তার পোর্টালে)
+   - Expense/Cost entries: Orion এর ইন্টারনাল খরচ (ভেন্ডর পেমেন্ট, ম্যাটেরিয়াল কস্ট ইত্যাদি) — **ক্লায়েন্ট কখনো দেখবে না**, শুধু Admin/Accounts
+   - Client profile page এ: মোট billed, মোট received, মোট internal cost, net profit/loss — এক নজরে
+
+**২. Main Company Ledger** — Orion Builders এর সামগ্রিক হিসাব:
+   - দৈনিক/মাসিক income ও expense এন্ট্রি — Accounts প্যানেল থেকে সরাসরি ইনপুট করা যাবে
+   - প্রতিটি এন্ট্রি ঐচ্ছিকভাবে একটা Client/Project এ ট্যাগ করা যাবে — ট্যাগ করলে সেটা ক্লায়েন্টের প্রোফাইলেও (যদি expense হয়, শুধু internal রিপোর্টে) এবং Main Ledger এও দেখাবে
+   - ট্যাগ ছাড়া entries (office rent, salary, ইত্যাদি general overhead) শুধু Main Ledger এ থাকবে, কোনো ক্লায়েন্টের সাথে যুক্ত না
+   - মাসিক সামারি: Total Income, Total Expense, Net — ড্যাশবোর্ডে চার্ট আকারে
+
+**ডেটা মডেল ধারণা:** একটাই `LedgerEntry` টেবিল ব্যবহার হবে দুই কাজের জন্যই (leadId ঐচ্ছিক — সেট থাকলে client-linked, না থাকলে general company entry), সাথে `type` (INCOME/EXPENSE) এবং `clientVisible` ফ্ল্যাগ (customer পোর্টালে দেখানোর জন্য — expense এন্ট্রিতে এটা সবসময় false থাকবে, কোনোভাবেই override করা যাবে না)।
+
+### ৫.৭ Customer Portal
 
 কাস্টমার লগইন করে দেখবে:
-- নিজের প্রজেক্ট/ইউনিটের সারাংশ (location, unit no, size, booking date)
+- নিজের প্রজেক্টের সামারি (location, building type, floors, start date, total contract value)
 - Construction progress (phase-wise timeline + photo gallery)
-- Payment schedule + payment history + downloadable invoice/receipt (PDF)
-- ডকুমেন্ট (booking form, allotment letter, sale deed — download)
-- সাপোর্ট/কমপ্লেইন্ট রেইজ করার অপশন (ticket system, সহজ version)
+- **Live CC camera feed** (যদি সেট করা থাকে)
+- Payment schedule + payment history + downloadable invoice/receipt (PDF) — pre-project বিল ও construction installment দুটোই
+- ডকুমেন্ট (প্রপোজাল, কন্ট্রাক্ট, গভঃ অনুমোদন কপি, রিসিট — download)
+- সাপোর্ট/কমপ্লেইন্ট রেইজ করার অপশন
 - নোটিফিকেশন সেন্টার (payment due, phase milestone reached)
 
-### ৫.৫ Document Management
+> কখনোই client এর কোনো ভিউতে Orion এর internal cost/expense/profit margin দেখানো হবে না।
 
-সব role-এর জন্য centralized document repository — লিড ডকুমেন্ট (NID, ছবি), sale documents, site photos, drawings/blueprints, payment receipts। Access role অনুযায়ী নিয়ন্ত্রিত।
+### ৫.৮ Document Management
 
-### ৫.৬ Notifications & Reminders
+সব role-এর জন্য centralized document repository — লিড ডকুমেন্ট, কন্ট্রাক্ট, সাইট ফটো, ড্রয়িং/ব্লুপ্রিন্ট, পেমেন্ট রিসিট। Access role অনুযায়ী নিয়ন্ত্রিত। Document type: Floor Plan, 3D Design, Proposal, Land Document, Contract, Govt Approval Copy, Receipt, Handover Certificate, Other।
 
-চ্যানেল: In-app + Email + SMS (ভবিষ্যতে WhatsApp — MediaMint/existing ad-related infra এর সাথে integrate করা যেতে পারে)। ইভেন্ট: follow-up due, payment due/overdue, phase milestone completed, document uploaded, new lead assigned।
+### ৫.৯ Notifications & Reminders
 
-### ৫.৭ Reporting & Analytics (Admin Dashboard)
+চ্যানেল: In-app + Email + WhatsApp (রিসিটের জন্য `wa.me` deep-link MVP তে, পরে 360dialog API দিয়ে auto-send)। ইভেন্ট: follow-up due, payment due/overdue, phase milestone completed, document uploaded, new lead assigned।
 
-- Sales funnel & conversion report (marketing executive-wise performance)
-- Project-wise progress vs timeline (Gantt-style view)
-- Financial report: total sales value, collected vs receivable, overdue aging
-- Lead source ROI (কোন source থেকে বেশি conversion হচ্ছে)
+### ৫.১০ Reporting & Analytics (Admin Dashboard)
+
+- Pre-project funnel & conversion report (stage-wise, marketing executive-wise)
+- Project-wise progress vs timeline
+- Financial report: total billed, collected vs receivable, overdue aging
+- **Client-wise profitability report** (billed − cost = margin, sortable)
+- Company-wide monthly income/expense summary
+- Lead source ROI
 
 ---
 
-## ৬. Data Model (High-level Entities)
+## ৬. Data Model (High-level Entities — সংশোধিত)
 
 ```
 User (role: admin/marketing/engineer/accounts/customer)
-Lead (source, stage, assigned_to, project_interest)
-Project (name, location, total_units, phase_template)
-Unit (project_id, unit_no, size, price, status: available/booked/sold)
-Customer (linked to User, linked to Unit via Sale)
-Sale (lead_id, unit_id, customer_id, sale_date, total_amount)
-PaymentPlan (sale_id, installments[])
-Installment (payment_plan_id, due_date, amount, status)
+Lead (source, stage, assigned_to, land_location, building_type, floors, local_contact)
+LeadChecklistItem (lead_id, label, status, note)
+LeadDocument (lead_id, file_url, file_type, description)
+LedgerEntry (lead_id [nullable], type: INCOME/EXPENSE, category, amount, date, receipt_no,
+             whatsapp_sent_at, client_visible, created_by)
+   — ব্যবহার হয়: pre-project billing (income), internal cost (expense),
+     এবং company-wide general entries (leadId null)
+Customer (linked to User, linked to Project)
+Project (lead_id [unique], customer_id, total_contract_value, rate_per_sqft, start_date,
+         camera_stream_url, status)
+PaymentPlan (project_id, installments[])
+Installment (payment_plan_id, phase_id [optional], due_date, amount, status)
 Payment (installment_id, amount_received, date, method, receipt_no)
-Phase (project_id or unit_id, name, order, planned_start, planned_end, actual_start, actual_end, percent_complete)
+Phase (project_id, name, order, planned_start, planned_end, actual_start, actual_end, percent_complete)
 PhaseUpdate (phase_id, updated_by, date, note, photos[])
-Document (owner_type, owner_id, file_url, type, uploaded_by)
+Document (project_id [optional], type, file_url, uploaded_by)
 Notification (user_id, type, message, read_status)
 ActivityLog (entity_type, entity_id, user_id, action, timestamp)
 ```
 
-(সম্পূর্ণ Prisma schema `03_schema.prisma` ফাইলে দেওয়া আছে — সরাসরি ব্যবহারযোগ্য।)
+> **বড় পরিবর্তন:** আগের ভার্সনে ছিল multi-unit "Project → Unit[] → Sale" (রিয়েল এস্টেট ডেভেলপার মডেল) — এটা সরিয়ে সরাসরি "Lead → Project" (এক ক্লায়েন্ট = এক কনস্ট্রাকশন জব) মডেলে আনা হয়েছে। সম্পূর্ণ Prisma schema `03_schema.prisma` তে (v2)।
 
 ---
 
@@ -239,23 +335,24 @@ ActivityLog (entity_type, entity_id, user_id, action, timestamp)
 
 | ক্যাটাগরি | চাহিদা |
 |---|---|
-| Security | Role-based access control, password hashing, HTTPS, sensitive doc access log |
-| Multi-project support | একাধিক প্রজেক্ট/সাইট একই সিস্টেমে ম্যানেজ করা যাবে (ভবিষ্যতে Elegant Looks-এর multi-branch মডেলের মতো scalable) |
-| Audit trail | প্রতিটি critical action (payment entry, stage change, phase update) log হবে — কে, কখন, কী পরিবর্তন করেছে |
+| Security | RBAC, password hashing, HTTPS, **client কখনো internal cost/expense দেখবে না (query-level enforced)** |
+| Audit trail | প্রতিটি critical action (payment entry, stage change, phase update, ledger entry) log হবে |
 | Backup | Daily automated DB backup |
-| Performance | Mobile-first responsive UI (site engineer মূলত মোবাইল থেকে ব্যবহার করবে) |
-| Localization | বাংলা + English উভয় UI সাপোর্ট (Phase 2 এ Bangla UI যোগ করা যেতে পারে) |
-| Offline resilience (future) | সাইটে দুর্বল নেটওয়ার্কে ফর্ম সাবমিট retry/queue (v2 এ বিবেচনা) |
+| Performance | Mobile-first responsive UI (site engineer ও customer মূলত মোবাইল থেকে ব্যবহার করবে) |
+| Localization | বাংলা + English উভয় UI সাপোর্ট |
+| File storage | Cloud storage (Cloudflare R2) — Vercel serverless এ local disk write সম্ভব না (দেখুন `08_R2_STORAGE_MIGRATION.md`) |
+| Live camera | Software শুধু stream URL embed করবে — camera hardware/vendor integration স্কোপের বাইরে |
 
 ---
 
 ## ৮. Assumptions & Open Questions
 
-- প্রাথমিকভাবে single company (Orion Builders) এর জন্য বানানো হচ্ছে; multi-tenant না (ভবিষ্যতে দরকার হলে architecture তা সাপোর্ট করবে)
-- Payment collection সিস্টেমের সাথে সরাসরি bKash/Nagad API integration MVP তে নেই — manual entry দিয়ে শুরু, পরে gateway integrate করা যাবে
-- SMS/WhatsApp gateway (যেমন: BulkSMSBD, 360dialog — যা আপনার WhatsApp SaAS প্রজেক্টে ব্যবহৃত হচ্ছে) পরবর্তী ফেজে integrate করা যাবে
+- প্রাথমিকভাবে single company (Orion Builders), multi-tenant না
+- Payment collection এ সরাসরি bKash/Nagad API integration MVP তে নেই — manual entry
+- WhatsApp রিসিট MVP তে `wa.me` deep-link (ম্যানুয়াল অ্যাটাচ) — auto-send (360dialog API) ভবিষ্যৎ ফেজে
 - একজন engineer একাধিক প্রজেক্টে assign হতে পারবে
+- ভবিষ্যতে land-share/flat-sale মডেল যোগ হলে এই স্কিমার উপর আলাদা মডিউল হিসেবে যোগ হবে, বর্তমান কনস্ট্রাকশন-সার্ভিস মডেল ভাঙবে না
 
 ---
 
-*পরবর্তী ডকুমেন্ট: `02_BUILD_PLAN.md` — ধাপে ধাপে ডেভেলপমেন্ট প্ল্যান (Claude Code দিয়ে বানানোর জন্য)।*
+*পরবর্তী ডকুমেন্ট: `02_BUILD_PLAN.md` (v2 অনুযায়ী আপডেট হবে) ও `09_BUSINESS_MODEL_MIGRATION_PROMPT.md` — এখন যা Claude Code তে চালাতে হবে।*

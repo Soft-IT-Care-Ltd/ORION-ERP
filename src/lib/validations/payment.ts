@@ -3,6 +3,7 @@ import { PaymentMethod } from '@prisma/client';
 import {
   id,
   integerBetween,
+  nullableId,
   optionalText,
   percent,
   positiveAmount,
@@ -12,7 +13,7 @@ import {
 
 /**
  * Payment plan, installment schedule ও payment entry এর ইনপুট যাচাই —
- * PRD সেকশন ৫.৩। ফর্ম (client) ও server action — দুই জায়গাতেই এই স্কিমাই চলে।
+ * PRD সেকশন ৫.৫। ফর্ম (client) ও server action — দুই জায়গাতেই এই স্কিমাই চলে।
  */
 
 /** একটি প্ল্যানে এর বেশি কিস্তি বাস্তবে হয় না — অসীম লুপ/পেলোড ঠেকানোর সীমা */
@@ -25,9 +26,9 @@ const amount = positiveAmount({ round: true });
 
 export const generatePlanSchema = z
   .object({
-    saleId: id,
+    projectId: id,
     bookingDate: requiredDate,
-    bookingPercent: percent('বুকিং'),
+    bookingPercent: percent('সাইনআপ মানি'),
     downPaymentPercent: percent('ডাউন পেমেন্ট'),
     downPaymentDays: integerBetween(0, 365, 'ডাউন পেমেন্টের দিন ০–৩৬৫'),
     agreementPercent: percent('এগ্রিমেন্ট'),
@@ -61,10 +62,12 @@ const installmentRow = z.object({
   label: requiredText(2, 120, 'কিস্তির নাম দিন'),
   dueDate: requiredDate,
   amount,
+  /** ঐচ্ছিক — "এই ফেজ শেষ হলে এই কিস্তি" (PRD সেকশন ৫.৫) */
+  phaseId: nullableId,
 });
 
 export const saveScheduleSchema = z.object({
-  saleId: id,
+  projectId: id,
   installments: z
     .array(installmentRow)
     .min(1, 'অন্তত একটি কিস্তি রাখতে হবে')
@@ -72,7 +75,7 @@ export const saveScheduleSchema = z.object({
 });
 
 /** প্ল্যান মুছে ফেলা — id ছাড়া আর কিছু লাগে না */
-export const saleIdSchema = z.object({ saleId: id });
+export const projectIdSchema = z.object({ projectId: id });
 
 /* -------------------------------------------------------- payment entry */
 

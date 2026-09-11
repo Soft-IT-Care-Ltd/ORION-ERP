@@ -110,15 +110,15 @@ export type FunnelReport = {
 
 /* ------------------------------------------------------ project progress */
 
-/** PRD সেকশন ৫.৭ — "Project-wise progress vs timeline" এর একটি সারি */
+/** PRD সেকশন ৫.১০ — "Project-wise progress vs timeline" এর একটি সারি */
 export type ProjectProgressRow = {
   projectId: string;
   name: string;
-  /** প্রজেক্টের ইউনিটগুলোর গড় অগ্রগতি (%) */
+  /** ফেজের সময়-ভারিত গড় অগ্রগতি (%) */
   progress: number;
-  unitCount: number;
-  /** ১০০% সম্পন্ন ইউনিট */
-  doneUnits: number;
+  phaseCount: number;
+  /** ১০০% সম্পন্ন ফেজ */
+  donePhases: number;
   /** planned end পেরিয়ে যাওয়া ফেজের সংখ্যা — চার্টে লাল ইঙ্গিত */
   delayedPhases: number;
 };
@@ -126,7 +126,7 @@ export type ProjectProgressRow = {
 /* --------------------------------------------------- collected vs due */
 
 /**
- * এক মাসের কালেকশন — PRD সেকশন ৫.৩ এর KPI (Receivable / Collected / %)।
+ * এক মাসের কালেকশন — PRD সেকশন ৫.১০ এর KPI (Receivable / Collected / %)।
  *
  * `due` = ওই মাসে due হওয়া কিস্তিগুলোর মোট, `collected` = সেই কিস্তিগুলোর
  * বিপরীতে যত টাকা এসেছে (যখনই আসুক)। তাই `rate` মানে "ওই মাসের পাওনার কত
@@ -161,7 +161,7 @@ export function ratio(part: number, total: number): number {
 /* ------------------------------------------------------------ exports */
 
 /**
- * এক্সপোর্টযোগ্য রিপোর্টের তালিকা — PRD সেকশন ৫.৭।
+ * এক্সপোর্টযোগ্য রিপোর্টের তালিকা — PRD সেকশন ৫.১০।
  *
  * প্রতিটি রিপোর্ট একই আকারে ডেটা দেয় (`ReportDataset`), তাই CSV রুট
  * (`/api/reports/<id>`) ও প্রিন্ট-ভিউ (`/admin/reports/print`) — দুটোই একই
@@ -212,7 +212,7 @@ export const REPORTS = {
   },
   'executive-performance': {
     label: 'এক্সিকিউটিভ পারফরম্যান্স',
-    description: 'মার্কেটিং এক্সিকিউটিভভেদে লিড, Won/Lost ও বিক্রয়মূল্য',
+    description: 'মার্কেটিং এক্সিকিউটিভভেদে লিড, Won/Lost ও কন্ট্রাক্ট ভ্যালু',
     group: 'sales',
     permission: 'report:full',
     timeScoped: true,
@@ -235,8 +235,8 @@ export const REPORTS = {
     slug: 'leads',
   },
   'project-progress': {
-    label: 'ইউনিট-ভিত্তিক অগ্রগতি',
-    description: 'প্রতিটি ইউনিটের % complete, চলমান ফেজ ও বিলম্ব',
+    label: 'প্রজেক্ট-ভিত্তিক অগ্রগতি',
+    description: 'প্রতিটি প্রজেক্টের % complete, চলমান ফেজ ও বিলম্ব',
     group: 'projects',
     permission: 'report:full',
     timeScoped: false,
@@ -257,6 +257,22 @@ export const REPORTS = {
     permission: 'report:financial',
     timeScoped: false,
     slug: 'overdue-aging',
+  },
+  'client-profitability': {
+    label: 'ক্লায়েন্ট-ভিত্তিক লাভ/ক্ষতি',
+    description: 'প্রতি ক্লায়েন্টের billed − internal cost = margin (PRD সেকশন ৫.১০)',
+    group: 'finance',
+    permission: 'report:financial',
+    timeScoped: false,
+    slug: 'client-profitability',
+  },
+  'company-ledger': {
+    label: 'কোম্পানি লেজার (মাসিক)',
+    description: 'সব আয়/ব্যয় এন্ট্রি — ক্লায়েন্ট-ট্যাগ সহ ও ছাড়া',
+    group: 'finance',
+    permission: 'report:financial',
+    timeScoped: true,
+    slug: 'company-ledger',
   },
   payments: {
     label: 'পেমেন্ট লেজার',
