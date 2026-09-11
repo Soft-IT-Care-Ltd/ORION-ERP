@@ -150,7 +150,8 @@ src/
 │   ├── prisma.ts
 │   ├── countries.ts       # দেশ + dial code (প্রবাসী residence ও ফোন picker)
 │   ├── phone.ts           # E.164 parse/format (libphonenumber, server-only)
-│   ├── upload.ts          # ফাইল স্টোরেজ — public/uploads (পরে S3/R2)
+│   ├── upload.ts          # ফাইল স্টোরেজ — R2, কনফিগ না থাকলে dev এ public/uploads
+│   ├── storage.ts         # Cloudflare R2 ক্লায়েন্ট (S3-compatible, server-only)
 │   ├── upload-limits.ts   # আপলোড সীমা ও অনুমোদিত টাইপ (client-safe)
 │   ├── rbac.ts            # permission matrix (PRD সেকশন ৪)
 │   ├── nav.ts             # panel-wise sidebar মেনু

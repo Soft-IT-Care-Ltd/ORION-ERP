@@ -5,32 +5,47 @@
 
 ---
 
-## ⚠️ শুরুর আগে একটি জরুরি সীমাবদ্ধতা পড়ুন
+## ফাইল স্টোরেজ — Cloudflare R2 (ডিপ্লয়ের আগে সেট করুন)
 
-**ফাইল আপলোড Vercel এ কাজ করবে না।** `src/lib/upload.ts` ফাইলগুলো
-`public/uploads/` এ লেখে, কিন্তু Vercel এর serverless ফাইলসিস্টেম **read-only**
-(শুধু `/tmp` লেখা যায়, আর সেটিও রিকোয়েস্টের পরে মুছে যায়)।
+Vercel এর serverless ফাইলসিস্টেম **read-only** (শুধু `/tmp` লেখা যায়, আর সেটিও
+রিকোয়েস্টের পরে মুছে যায়), তাই আপলোড করা ফাইল সার্ভারের ডিস্কে রাখা যায় না।
+`src/lib/upload.ts` এখন **Cloudflare R2** এ লেখে (S3-সামঞ্জস্যপূর্ণ API,
+`@aws-sdk/client-s3` দিয়ে) — বাকেট ও কী তৈরির ধাপগুলো `08_R2_STORAGE_MIGRATION.md`
+এর ধাপ ১ এ।
 
-ফলে এই তিনটি ফিচার প্রোডাকশনে চলবে না:
+যে ফিচারগুলো এই স্টোরেজ ব্যবহার করে:
 
 - লিড ডকুমেন্ট আপলোড (`/sales/leads/<id>`)
-- সেল ডকুমেন্ট আপলোড (`/accounts/schedule/<saleId>`)
-- ইঞ্জিনিয়ারের সাইট ফটো (`/engineer/sites/<unitId>`)
+- প্রজেক্ট ডকুমেন্ট আপলোড (`/accounts/schedule/<projectId>`)
+- ইঞ্জিনিয়ারের সাইট ফটো (`/engineer/sites/<projectId>`)
 
-আপলোড **ক্র্যাশ করবে না** — "ফাইল সেভ করা যায়নি" মেসেজ দিয়ে থেমে যাবে। বাকি
-পুরো অ্যাপ (লিড, পাইপলাইন, সেল, পেমেন্ট, রসিদ, ফেজ, রিপোর্ট) ঠিকঠাক চলবে।
+**দুটি মোড:**
 
-**সমাধান** — অবজেক্ট স্টোরেজে সরানো। `saveUploadedFile()` এর ভেতরটুকু বদলালেই
-হবে, কলাররা `{ url, fileName, size }` ছাড়া আর কিছু জানে না:
-
-| বিকল্প | মন্তব্য |
+| অবস্থা | কী হয় |
 |---|---|
-| **Vercel Blob** | সবচেয়ে কম ঝামেলা — `@vercel/blob`, ড্যাশবোর্ড থেকেই টোকেন |
-| **Cloudflare R2** | সস্তা, egress ফ্রি; S3-সামঞ্জস্যপূর্ণ API |
-| **AWS S3** | পরিচিত, কিন্তু egress খরচ আছে |
+| পাঁচটি `R2_*` variable সেট আছে | ফাইল সরাসরি R2 বাকেটে যায়, ডাটাবেসে পূর্ণ পাবলিক URL সেভ হয় |
+| সেট নেই + `NODE_ENV=development` | আগের মতোই `public/uploads/` এ পড়ে (লোকাল কাজ চালানোর জন্য) |
+| সেট নেই + প্রোডাকশন | আপলোড "ফাইল স্টোরেজ কনফিগার করা নেই" বলে থেমে যায় — নীরবে ভাঙে না |
 
-ডকুমেন্ট আপলোড এখনই দরকার হলে **আগে এই কাজটি করুন**, নইলে VPS/Railway/Render
-এর মতো persistent ডিস্কওয়ালা হোস্টে ডিপ্লয় করুন।
+**Vercel এ যা বসাতে হবে** (Settings → Environment Variables, তিনটি environment —
+Production/Preview/Development — এই ৫টি হুবহু):
+
+```
+R2_ACCOUNT_ID=xxxxxxxxxxxx
+R2_ACCESS_KEY_ID=xxxxxxxxxxxx
+R2_SECRET_ACCESS_KEY=xxxxxxxxxxxx
+R2_BUCKET_NAME=orion-erp-files
+R2_PUBLIC_URL=https://pub-xxxxxxxx.r2.dev
+```
+
+> `R2_PUBLIC_URL` **বিল্ড টাইমেও** দরকার — `next.config.mjs` এটি থেকে হোস্টনেম বের
+> করে `images.remotePatterns` এ বসায়, নইলে `next/image` সাইট ফটো লোড করতে অস্বীকার
+> করবে। তাই এই ভ্যারিয়েবল যোগ/বদল করার পর **নতুন করে ডিপ্লয় করতে হবে** (শুধু env
+> সেভ করলেই আগের বিল্ড বদলাবে না)।
+
+> R2 বাকেট public করার মানে — URL জানলে যে কেউ ফাইলটি দেখতে পারবে। MVP তে এটি
+> গ্রহণযোগ্য; ক্লায়েন্টের sensitive কাগজ (NID, দলিল) বাড়তে থাকলে পরে private
+> বাকেট + signed URL এ যাওয়া যাবে (`lib/storage.ts` এর ভেতরটুকু বদলালেই হবে)।
 
 ---
 
@@ -139,6 +154,14 @@ Preview ও Development — তিনটিতেই যোগ করুন (Pre
 | `NEXTAUTH_SECRET` | ধাপ ২ এর প্রথম সিক্রেট |
 | `NEXTAUTH_URL` | অ্যাপের public URL — `https://<project>.vercel.app` বা কাস্টম ডোমেইন |
 | `CRON_SECRET` | ধাপ ২ এর দ্বিতীয় সিক্রেট |
+| `R2_ACCOUNT_ID` | Cloudflare R2 অ্যাকাউন্ট আইডি |
+| `R2_ACCESS_KEY_ID` | R2 API টোকেনের Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | R2 API টোকেনের Secret Access Key |
+| `R2_BUCKET_NAME` | বাকেটের নাম — `orion-erp-files` |
+| `R2_PUBLIC_URL` | বাকেটের public URL (শেষে `/` ছাড়া) — বিল্ড টাইমেও লাগে |
+
+> পাঁচটি `R2_*` ছাড়া ফাইল আপলোড (লিড ডকুমেন্ট, প্রজেক্ট ডকুমেন্ট, সাইট ফটো)
+> প্রোডাকশনে কাজ করবে না — উপরের "ফাইল স্টোরেজ" অংশ দেখুন।
 
 > `CRON_SECRET` সেট থাকলে Vercel Cron নিজে থেকেই
 > `Authorization: Bearer <CRON_SECRET>` হেডার পাঠায় — রুটটি ঠিক এটিই আশা করে
@@ -264,7 +287,9 @@ DATABASE_URL="<ডাইরেক্ট-url>" npm run db:deploy
 | লগইনের পর ভুল ডোমেইনে রিডাইরেক্ট | `NEXTAUTH_URL` আসল ডোমেইনে সেট করে redeploy |
 | `[next-auth][error] NO_SECRET` | `NEXTAUTH_SECRET` সেট করা নেই |
 | Cron এ ৪০১ | `CRON_SECRET` env এ সেট নেই, বা সেট করার পর redeploy করা হয়নি |
-| আপলোডে "ফাইল সেভ করা যায়নি" | প্রত্যাশিত — উপরের সীমাবদ্ধতা অংশটি দেখুন |
+| আপলোডে "ফাইল স্টোরেজ কনফিগার করা নেই" | পাঁচটি `R2_*` env সেট নেই — উপরের স্টোরেজ অংশ দেখুন, সেট করে redeploy |
+| আপলোডে "স্টোরেজে পৌঁছায়নি" | R2 কী/বাকেটের নাম ভুল, বা টোকেনে Object Read & Write অনুমতি নেই |
+| সাইট ফটো লোড হয় না (`next/image` ত্রুটি) | `R2_PUBLIC_URL` বদলানোর পর redeploy করা হয়নি — হোস্টনেমটি বিল্ড টাইমে বসে |
 | পেজ টাইমআউট | `maxDuration` বাড়ান (`vercel.json`), অথবা DB region অ্যাপের region (`bom1`) এর কাছে নিন |
 
 ---

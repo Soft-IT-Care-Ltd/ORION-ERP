@@ -29,8 +29,8 @@ function field(formData: FormData, name: string) {
  *
  * এক সাবমিটে: PhaseUpdate রেকর্ড (% + মন্তব্য + ছবি) তৈরি হয় এবং Phase এর
  * percentComplete / status / actual date গুলো সেই অনুযায়ী বসে।
- * ছবি আপাতত `public/uploads/phases/<phaseId>/` এ যায় — `lib/upload.ts` এর ভেতরটা
- * বদলালেই পরে S3/R2 তে সরানো যাবে।
+ * ছবি `lib/upload.ts` দিয়ে `phases/<phaseId>/` key তে যায় — R2 কনফিগার করা
+ * থাকলে বাকেটে, নইলে (শুধু dev এ) `public/uploads/` এ।
  */
 export async function submitPhaseUpdate(
   formData: FormData,
