@@ -15,10 +15,13 @@ import { CHART_COLOR, CHART_TOOLTIP_STYLE, formatCompactBDT } from '@/lib/report
 import type { LedgerMonth } from '@/lib/ledger-data';
 
 /**
- * PRD সেকশন ৫.৬ — মাসিক Total Income vs Total Expense।
+ * PRD সেকশন ৫.৬ ও ৫.১০ — কোম্পানির মাসিক Total Income vs Total Expense।
  *
- * `leadId` থাকুক বা না থাকুক, সব এন্ট্রি একসাথে (company-wide হিসাব)। Admin
- * ড্যাশবোর্ডের চার্টগুলোর মতোই মোবাইলে আড়াআড়ি স্ক্রল হয় — পাতা নয়, চার্টটিই।
+ * `leadId` থাকুক বা না থাকুক, সব এন্ট্রি একসাথে (company-wide হিসাব) —
+ * ক্লায়েন্টের সার্ভিস বিল আর অফিস ভাড়া/বেতন, দুটোই একই বারে।
+ *
+ * দুই ড্যাশবোর্ডেই বসে: Accounts এ ৬ মাসের প্রবণতা, Admin এ ১২ মাসের। মোবাইলে
+ * পাতা নয়, চার্টটিই আড়াআড়ি স্ক্রল হয়।
  */
 export function LedgerTrendChart({ months }: { months: LedgerMonth[] }) {
   const hasData = months.some((month) => month.income > 0 || month.expense > 0);
@@ -33,7 +36,11 @@ export function LedgerTrendChart({ months }: { months: LedgerMonth[] }) {
 
   return (
     <div className="-mx-2 overflow-x-auto px-2">
-      <div className="min-w-[420px]">
+      {/*
+       * ন্যূনতম প্রস্থ মাসের সংখ্যার সাথে বাড়ে — Accounts এ ৬ মাস, Admin এ ১২।
+       * স্থির ক্লাসে দুটোর একটাতে হয় বার চ্যাপ্টা হতো, নয় অক্ষের লেবেল ঠেসে যেত।
+       */}
+      <div style={{ minWidth: Math.max(420, months.length * 56) }}>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={months} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
             <CartesianGrid vertical={false} stroke={CHART_COLOR.grid} />

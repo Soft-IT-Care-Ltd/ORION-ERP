@@ -153,6 +153,87 @@ export type CollectionReport = {
   rate: number;
 };
 
+/* --------------------------------------------- client profitability */
+
+/**
+ * PRD সেকশন ৫.১০ — "Client-wise profitability report (billed − cost = margin)"
+ * এর একটি সারি।
+ *
+ * সংখ্যাগুলো `lib/ledger.ts` এর `computeClientProfit` থেকেই আসে, তাই ক্লায়েন্ট
+ * প্রোফাইলের সামারি কার্ড ও এই টেবিল কখনো আলাদা কথা বলে না।
+ */
+export type ClientProfitRow = {
+  leadId: string;
+  name: string;
+  phone: string;
+  stage: LeadStage;
+  /** Won হয়ে প্রজেক্ট তৈরি হলে তার শিরোনাম, নইলে null */
+  projectTitle: string | null;
+  /** কন্ট্রাক্টে লেখা মোট মূল্য — প্রজেক্ট না হলে null */
+  contractValue: number | null;
+  /** pre-project সার্ভিস বিল (Ledger INCOME) */
+  serviceBilled: number;
+  /** কনস্ট্রাকশন কন্ট্রাক্টের কিস্তির মোট */
+  contractBilled: number;
+  /** serviceBilled + contractBilled */
+  totalBilled: number;
+  /** এ পর্যন্ত হাতে আসা — সার্ভিস রসিদ + কিস্তির আদায় */
+  totalReceived: number;
+  /** ইন্টারনাল খরচ (Ledger EXPENSE) */
+  totalCost: number;
+  /** totalBilled − totalCost */
+  netMargin: number;
+  /** মার্জিন শতাংশ — বিল শূন্য হলে অনির্ধারিত, তাই null */
+  marginRate: number | null;
+};
+
+export type ClientProfitReport = {
+  rows: ClientProfitRow[];
+  /** সব ক্লায়েন্ট মিলিয়ে — কার্ডের হেডারে ও টেবিলের ফুটারে */
+  totalBilled: number;
+  totalReceived: number;
+  totalCost: number;
+  netMargin: number;
+};
+
+/** টেবিলের যে কলামগুলোতে ক্লিক করে সাজানো যায় */
+export const CLIENT_PROFIT_SORTS = ['margin', 'billed', 'received', 'cost', 'name'] as const;
+export type ClientProfitSort = (typeof CLIENT_PROFIT_SORTS)[number];
+
+export type SortDirection = 'asc' | 'desc';
+
+const CLIENT_PROFIT_VALUE: Record<
+  Exclude<ClientProfitSort, 'name'>,
+  (row: ClientProfitRow) => number
+> = {
+  margin: (row) => row.netMargin,
+  billed: (row) => row.totalBilled,
+  received: (row) => row.totalReceived,
+  cost: (row) => row.totalCost,
+};
+
+/**
+ * PRD সেকশন ৫.১০ — "sortable by margin"। বিশুদ্ধ ফাংশন (নতুন অ্যারে ফেরত দেয়),
+ * তাই সার্ভারে ডিফল্ট সাজানো আর ক্লায়েন্টে হেডার-ক্লিকে সাজানো — দুই জায়গাতেই
+ * একই নিয়ম।
+ *
+ * নামের ক্ষেত্রে বাংলা collation দরকার, তাই `localeCompare('bn')`; সংখ্যার
+ * ক্ষেত্রে টাই হলে নাম দিয়ে ভাঙা হয় যাতে ক্রমটা স্থিতিশীল থাকে।
+ */
+export function sortClientProfit(
+  rows: ClientProfitRow[],
+  key: ClientProfitSort,
+  direction: SortDirection,
+): ClientProfitRow[] {
+  const sign = direction === 'asc' ? 1 : -1;
+
+  return [...rows].sort((a, b) => {
+    if (key === 'name') return sign * a.name.localeCompare(b.name, 'bn');
+    const diff = CLIENT_PROFIT_VALUE[key](a) - CLIENT_PROFIT_VALUE[key](b);
+    return diff !== 0 ? sign * diff : a.name.localeCompare(b.name, 'bn');
+  });
+}
+
 /** ভাগ করে শতাংশ — শূন্য হর নিরাপদে সামলায় */
 export function ratio(part: number, total: number): number {
   return total > 0 ? Math.round((part / total) * 100) : 0;

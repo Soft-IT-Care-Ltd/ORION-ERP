@@ -159,7 +159,7 @@ export function summarizeLedger(
  * `net` = billed − cost (PRD সেকশন ৫.১০ এর "billed − cost = margin"); এখনো
  * অনাদায়ী টাকা থাকলে সেটি `outstanding` এ আলাদা দেখানো হয়।
  */
-export type ClientLedgerSummary = LedgerSummary & {
+export type ClientProfit = {
   /** pre-project সার্ভিস বিল (ledger income) */
   serviceBilled: number;
   /** কনস্ট্রাকশন কন্ট্রাক্টে মোট কিস্তি */
@@ -176,16 +176,23 @@ export type ClientLedgerSummary = LedgerSummary & {
   netProfit: number;
 };
 
-export function summarizeClientLedger(
-  entries: { type: LedgerType; amount: number }[],
+export type ClientLedgerSummary = LedgerSummary & ClientProfit;
+
+/**
+ * হিসাবটি এখানে আলাদা করে রাখা, কারণ তিন জায়গায় একই সংখ্যা লাগে এবং সেগুলো
+ * একই ইনপুট থেকে আসে না: ক্লায়েন্ট প্রোফাইলের সামারি কার্ড কাঁচা এন্ট্রি থেকে
+ * (`summarizeClientLedger`), আর অ্যাডমিন ড্যাশবোর্ডের profitability টেবিল ও
+ * CSV রিপোর্ট Prisma `groupBy` এর যোগফল থেকে (`loadClientProfitability`)।
+ * সূত্রটি এক জায়গায় থাকায় তিনটিতে সংখ্যা আলাদা হয়ে যাওয়ার সুযোগ নেই।
+ */
+export function computeClientProfit(
+  ledger: { billed: number; cost: number },
   contract: { total: number; collected: number } = { total: 0, collected: 0 },
-): ClientLedgerSummary {
-  const ledger = summarizeLedger(entries);
+): ClientProfit {
   const totalBilled = ledger.billed + contract.total;
   const totalReceived = ledger.billed + contract.collected;
 
   return {
-    ...ledger,
     serviceBilled: ledger.billed,
     contractBilled: contract.total,
     contractCollected: contract.collected,
@@ -194,4 +201,12 @@ export function summarizeClientLedger(
     outstanding: Math.max(0, totalBilled - totalReceived),
     netProfit: totalBilled - ledger.cost,
   };
+}
+
+export function summarizeClientLedger(
+  entries: { type: LedgerType; amount: number }[],
+  contract: { total: number; collected: number } = { total: 0, collected: 0 },
+): ClientLedgerSummary {
+  const ledger = summarizeLedger(entries);
+  return { ...ledger, ...computeClientProfit(ledger, contract) };
 }

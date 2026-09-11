@@ -25,7 +25,7 @@ import { cn, formatBDT } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AgingSummary, OverdueTable } from '@/components/payment-schedule';
-import { LedgerTrendChart } from './ledger-trend-chart';
+import { LedgerTrendChart } from '@/components/reports/ledger-trend-chart';
 import { OverdueSweepButton } from './payments/overdue-sweep-button';
 
 export const metadata = { title: 'অ্যাকাউন্টস ড্যাশবোর্ড' };

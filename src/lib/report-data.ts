@@ -20,11 +20,14 @@ import {
 } from '@/lib/leads';
 import { AGING_BUCKET_LABEL, PAYMENT_METHOD_LABEL } from '@/lib/payments';
 import { loadAgingReport } from '@/lib/payment-data';
-import { LEDGER_CATEGORY_LABEL, LEDGER_TYPE_SHORT } from '@/lib/ledger';
+import { computeClientProfit, LEDGER_CATEGORY_LABEL, LEDGER_TYPE_SHORT } from '@/lib/ledger';
 import { PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { computePhaseStatus, overallProgress, summarizePhases } from '@/lib/phases';
 import {
   ratio,
+  sortClientProfit,
+  type ClientProfitReport,
+  type ClientProfitRow,
   type CollectionMonthRow,
   type CollectionReport,
   type FunnelRange,
@@ -294,6 +297,111 @@ export async function loadCollectionTrend(now: Date): Promise<CollectionReport> 
     totalCollected,
     totalOutstanding: Math.max(0, totalDue - totalCollected),
     rate: ratio(totalCollected, totalDue),
+  };
+}
+
+/* -------------------------------------------------- client profitability */
+
+/**
+ * PRD সেকশন ৫.১০ — "Client-wise profitability report (billed − cost = margin)"।
+ *
+ * অ্যাডমিন ড্যাশবোর্ডের টেবিল ও CSV এক্সপোর্ট — দুটোই এই একটি লোডার ব্যবহার
+ * করে, তাই পর্দার সংখ্যা আর নামানো ফাইলের সংখ্যা কখনো আলাদা হয় না।
+ *
+ * চারটি কুয়েরি, প্রতিটিই যোগফল-স্তরে:
+ *  ১. যেসব লিডের হয় লেজার এন্ট্রি আছে, নয়তো প্রজেক্ট হয়ে গেছে — শুধু তারাই
+ *     রিপোর্টে আসে (যে লিডে টাকার কোনো হিসাব নেই, তার সারি অর্থহীন)।
+ *  ২. `groupBy(leadId, type)` — ক্লায়েন্টভেদে বিল ও ইন্টারনাল কস্ট।
+ *  ৩+৪. কিস্তির মোট ও তার বিপরীতে আদায়। পেমেন্ট টেবিলটাই সবচেয়ে বড়, তাই
+ *     সেটি `groupBy` দিয়ে DB তেই যোগ করে ফেলা হয়; কিস্তিগুলো আসে শুধু
+ *     `id → paymentPlanId` ম্যাপ আর প্ল্যানের মোট বের করতে।
+ *
+ * সাজানো ডিফল্টে মার্জিন অনুযায়ী descending — সবচেয়ে লাভজনক ক্লায়েন্ট উপরে।
+ */
+export async function loadClientProfitability(): Promise<ClientProfitReport> {
+  const [leads, ledgerSums, installments, paymentSums] = await Promise.all([
+    prisma.lead.findMany({
+      where: { OR: [{ ledgerEntries: { some: {} } }, { project: { isNot: null } }] },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        stage: true,
+        project: {
+          select: {
+            title: true,
+            totalContractValue: true,
+            paymentPlan: { select: { id: true } },
+          },
+        },
+      },
+    }),
+    prisma.ledgerEntry.groupBy({
+      by: ['leadId', 'type'],
+      where: { leadId: { not: null } },
+      _sum: { amount: true },
+    }),
+    prisma.installment.findMany({ select: { id: true, paymentPlanId: true, amount: true } }),
+    prisma.payment.groupBy({ by: ['installmentId'], _sum: { amountReceived: true } }),
+  ]);
+
+  // লিড → { billed, cost }
+  const ledgerByLead = new Map<string, { billed: number; cost: number }>();
+  for (const row of ledgerSums) {
+    if (!row.leadId) continue;
+    const bucket = ledgerByLead.get(row.leadId) ?? { billed: 0, cost: 0 };
+    const amount = Number(row._sum.amount ?? 0);
+    if (row.type === LedgerType.INCOME) bucket.billed += amount;
+    else bucket.cost += amount;
+    ledgerByLead.set(row.leadId, bucket);
+  }
+
+  const collectedByInstallment = new Map(
+    paymentSums.map((row) => [row.installmentId, Number(row._sum.amountReceived ?? 0)]),
+  );
+
+  // প্ল্যান → { total, collected }
+  const contractByPlan = new Map<string, { total: number; collected: number }>();
+  for (const installment of installments) {
+    const bucket = contractByPlan.get(installment.paymentPlanId) ?? { total: 0, collected: 0 };
+    const amount = Number(installment.amount);
+    bucket.total += amount;
+    // অতিরিক্ত আদায় (রাউন্ডিং/অগ্রিম) কিস্তির চেয়ে বেশি দেখানো হয় না —
+    // `loadCollectionTrend` ঠিক একই নিয়ম মানে
+    bucket.collected += Math.min(amount, collectedByInstallment.get(installment.id) ?? 0);
+    contractByPlan.set(installment.paymentPlanId, bucket);
+  }
+
+  const rows: ClientProfitRow[] = leads.map((lead) => {
+    const ledger = ledgerByLead.get(lead.id) ?? { billed: 0, cost: 0 };
+    const planId = lead.project?.paymentPlan?.id;
+    const contract = (planId ? contractByPlan.get(planId) : null) ?? { total: 0, collected: 0 };
+    const profit = computeClientProfit(ledger, contract);
+
+    return {
+      leadId: lead.id,
+      name: lead.name,
+      phone: lead.phone,
+      stage: lead.stage,
+      projectTitle: lead.project?.title ?? null,
+      contractValue: lead.project ? Number(lead.project.totalContractValue) : null,
+      serviceBilled: profit.serviceBilled,
+      contractBilled: profit.contractBilled,
+      totalBilled: profit.totalBilled,
+      totalReceived: profit.totalReceived,
+      totalCost: ledger.cost,
+      netMargin: profit.netProfit,
+      // বিল না থাকলে হার অনির্ধারিত — শূন্য দেখালে "কোনো লাভ নেই" বোঝাত
+      marginRate: profit.totalBilled > 0 ? ratio(profit.netProfit, profit.totalBilled) : null,
+    };
+  });
+
+  return {
+    rows: sortClientProfit(rows, 'margin', 'desc'),
+    totalBilled: rows.reduce((sum, row) => sum + row.totalBilled, 0),
+    totalReceived: rows.reduce((sum, row) => sum + row.totalReceived, 0),
+    totalCost: rows.reduce((sum, row) => sum + row.totalCost, 0),
+    netMargin: rows.reduce((sum, row) => sum + row.netMargin, 0),
   };
 }
 
@@ -752,32 +860,14 @@ async function paymentsDataset(range: FunnelRange, now: Date): Promise<ReportDat
 /* ------------------------------------------- client profit / company ledger */
 
 /**
- * PRD সেকশন ৫.১০ — "Client-wise profitability report (billed − cost = margin)"।
+ * PRD সেকশন ৫.১০ — "Client-wise profitability report"।
  *
- * `billed` = ক্লায়েন্টকে দেওয়া সব বিল: pre-project LedgerEntry (INCOME) + কনস্ট্রাকশন
- * কিস্তির মোট। `cost` = সেই ক্লায়েন্টের বিপরীতে Orion এর ইন্টারনাল খরচ (EXPENSE)।
- * রিপোর্টটি শুধু `report:financial` ওয়ালারা নামাতে পারেন — কাস্টমার কখনো নয়।
+ * ড্যাশবোর্ডের টেবিলের সঙ্গে এক সংখ্যা রাখতে হিসাবটি `loadClientProfitability`
+ * এই করে; এখানে শুধু সেটিকে CSV এর কলাম-সারিতে সাজানো হয়। রিপোর্টটি শুধু
+ * `report:financial` ওয়ালারা নামাতে পারেন — কাস্টমার কখনো নয়।
  */
 async function clientProfitabilityDataset(): Promise<ReportDataset> {
-  const leads = await prisma.lead.findMany({
-    where: { ledgerEntries: { some: {} } },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      name: true,
-      phone: true,
-      stage: true,
-      ledgerEntries: { select: { type: true, amount: true } },
-      project: {
-        select: {
-          title: true,
-          totalContractValue: true,
-          paymentPlan: {
-            select: { installments: { select: { payments: { select: { amountReceived: true } } } } },
-          },
-        },
-      },
-    },
-  });
+  const report = await loadClientProfitability();
 
   return {
     columns: [
@@ -787,35 +877,27 @@ async function clientProfitabilityDataset(): Promise<ReportDataset> {
       { header: 'প্রজেক্ট' },
       { header: 'কন্ট্রাক্ট ভ্যালু (৳)', kind: 'money' },
       { header: 'প্রি-প্রজেক্ট বিল (৳)', kind: 'money' },
-      { header: 'কনস্ট্রাকশন আদায় (৳)', kind: 'money' },
+      { header: 'কনস্ট্রাকশন বিল (৳)', kind: 'money' },
+      { header: 'মোট বিল (৳)', kind: 'money' },
+      { header: 'মোট আদায় (৳)', kind: 'money' },
       { header: 'ইন্টারনাল কস্ট (৳)', kind: 'money' },
-      { header: 'নিট (৳)', kind: 'money' },
+      { header: 'নিট মার্জিন (৳)', kind: 'money' },
+      { header: 'মার্জিন (%)', kind: 'percent' },
     ],
-    rows: leads.map((lead) => {
-      const billed = lead.ledgerEntries
-        .filter((entry) => entry.type === LedgerType.INCOME)
-        .reduce((sum, entry) => sum + Number(entry.amount), 0);
-      const cost = lead.ledgerEntries
-        .filter((entry) => entry.type === LedgerType.EXPENSE)
-        .reduce((sum, entry) => sum + Number(entry.amount), 0);
-      const collected = (lead.project?.paymentPlan?.installments ?? []).reduce(
-        (sum, installment) =>
-          sum + installment.payments.reduce((s, p) => s + Number(p.amountReceived), 0),
-        0,
-      );
-
-      return [
-        lead.name,
-        lead.phone,
-        STAGE_LABEL[lead.stage],
-        lead.project?.title ?? null,
-        lead.project === null ? null : Number(lead.project.totalContractValue),
-        billed,
-        collected,
-        cost,
-        billed + collected - cost,
-      ];
-    }),
+    rows: report.rows.map((row) => [
+      row.name,
+      row.phone,
+      STAGE_LABEL[row.stage],
+      row.projectTitle,
+      row.contractValue,
+      row.serviceBilled,
+      row.contractBilled,
+      row.totalBilled,
+      row.totalReceived,
+      row.totalCost,
+      row.netMargin,
+      row.marginRate,
+    ]),
   };
 }
 

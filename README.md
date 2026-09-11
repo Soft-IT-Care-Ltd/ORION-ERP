@@ -109,6 +109,10 @@ npm run dev
 | `npm run db:migrate` | `prisma migrate dev` |
 | `npm run db:studio` | Prisma Studio (ডেটা ব্রাউজার) |
 | `npm run db:seed` | ডেমো ইউজার সিড |
+| `npm run test:validations` | Zod স্কিমার যাচাই (DB লাগে না) |
+| `npm run test:ledger` | লেজারের হিসাব ও "ক্লায়েন্ট খরচ দেখবে না" নিয়ম (DB লাগে) |
+| `npm run test:portal` | কাস্টমার পোর্টালের payload ও রসিদের স্কোপ (DB লাগে) |
+| `npm run test:dashboard` | নোটিফিকেশন sweep ও অ্যাডমিন ড্যাশবোর্ডের রিপোর্ট-কুয়েরি (DB লাগে) |
 
 ---
 
@@ -298,6 +302,45 @@ WhatsApp Business API দিয়ে auto-send যোগ হলে শুধু
 
 প্রতিটি এন্ট্রি `ActivityLog` এ যায় (`LEDGER_INCOME_ADDED`, `LEDGER_EXPENSE_ADDED`,
 `LEDGER_ENTRY_DELETED`) — CLAUDE.md নিয়ম ৪।
+
+## ৫ঘ. নোটিফিকেশন ও অ্যাডমিন ড্যাশবোর্ড (PRD সেকশন ৫.৯ ও ৫.১০)
+
+**নোটিফিকেশন** (`lib/notifications.ts`) দুই স্তরে লেখা হয়:
+
+- **তাৎক্ষণিক** — ইউজারের অ্যাকশনের সাথে সাথে (লিড অ্যাসাইন, ডকুমেন্ট আপলোড,
+  প্রজেক্ট তৈরি)। কল-সাইট server action এ।
+- **সময়-নির্ভর sweep** — কেউ কিছু না করলেও নিছক তারিখ পেরোলেই যেগুলো ঘটে:
+  ফলো-আপ ওভারডিউ, কিস্তির **৭ দিন আগের** রিমাইন্ডার, **বকেয়া** কিস্তি, আর
+  ফেজ **DONE** (১০০%) হলে কাস্টমারকে খবর। রোজ `/api/cron/overdue` থেকে; cron
+  সেট না থাকলেও বেল রেন্ডারের সময় ঘণ্টায় একবার ফলব্যাক (`sweepIfStale`)।
+
+প্রতিটি sweep-নোটিফিকেশনে একটি স্থিতিশীল `key` (`@@unique([userId, key])`) —
+তাই sweep যতবারই চলুক, একই খবর দ্বিতীয়বার লেখা হয় না। বকেয়ার key তে aging
+বালতিটিও থাকে, তাই বকেয়া পুরনো হলে (১৫ → ৩০ → ৩০+ দিন) নতুন, জোরালো রিমাইন্ডার যায়।
+
+বেল + অপঠিত badge পাঁচটি role এর প্রতিটিতেই আছে — `PanelShell` এ একবার বসানো
+(`components/layout/notification-bell.tsx`), সার্ভার-রেন্ডার করা তালিকা নিয়ে শুরু
+হয় ও প্রতি মিনিটে server action দিয়ে রিফ্রেশ হয়।
+
+**অ্যাডমিন ড্যাশবোর্ড** (`/admin`) এ পাঁচটি চার্ট/টেবিল, প্রতিটির ডেটা Prisma
+aggregate/groupBy কুয়েরি থেকে (`lib/report-data.ts`):
+
+| # | কার্ড | উৎস |
+|---|---|---|
+| ১ | Pre-project funnel — stage-wise lead count | `Lead` + `LeadActivity` (Lost লিড যতদূর পৌঁছেছিল সেই ধাপ পর্যন্ত গোনা) |
+| ২ | Project Progress Overview — গড় % complete | `Phase` (সময়-ভারিত গড়) |
+| ৩ | মাসিক Collected vs Receivable | `Installment` + `Payment` |
+| ৪ | **Client-wise Profitability** — billed, cost, net margin | `LedgerEntry.groupBy` + `Payment.groupBy` |
+| ৫ | **Company Monthly Income vs Expense** | `LedgerEntry` — `leadId` থাকুক না থাকুক, সব |
+
+৪ নং টেবিলটি **sortable** — যেকোনো কলামের নামে ক্লিক করলে ক্রম বদলায় (ডিফল্ট
+মার্জিন descending)। সংখ্যাগুলো `lib/ledger.ts` এর `computeClientProfit` থেকে,
+অর্থাৎ ক্লায়েন্ট প্রোফাইলের সামারি কার্ড ও `client-profitability` CSV — তিন
+জায়গায় একই হিসাব।
+
+`npm run test:dashboard` এ এগুলো আসল DB তে যাচাই হয় (২৩টি অ্যাসারশন)।
+
+---
 
 ## ৬. নতুন shadcn/ui কম্পোনেন্ট যোগ
 

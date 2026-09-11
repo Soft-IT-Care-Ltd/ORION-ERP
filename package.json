@@ -16,7 +16,8 @@
     "test:validations": "tsx scripts/check-validations.mts",
     "test:storage": "tsx scripts/check-storage.mts",
     "test:ledger": "tsx scripts/check-ledger.mts",
-    "test:portal": "tsx scripts/check-customer-portal.mts"
+    "test:portal": "tsx scripts/check-customer-portal.mts",
+    "test:dashboard": "tsx scripts/check-dashboard.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
