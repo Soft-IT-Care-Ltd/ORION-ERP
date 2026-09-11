@@ -42,19 +42,19 @@ import {
   STAGE_LABEL,
 } from '@/lib/leads';
 import { PROJECT_STATUS_BADGE, PROJECT_STATUS_LABEL } from '@/lib/projects';
-import { loadLeadLedger } from '@/lib/ledger-data';
+import { loadClientLedger } from '@/lib/ledger-data';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { ClientLedger } from '@/components/ledger';
 import { leadCardSelect, startOfToday, toEditableLead } from '../serialize';
 import { AddNoteForm } from './add-note-form';
-import { BillingSection } from './billing-section';
 import { ChecklistSection, type ChecklistItemView } from './checklist-section';
 import { DocumentList } from './document-list';
 import { DocumentUploadForm } from './document-upload-form';
 import { LeadDetailActions } from './lead-detail-actions';
-import { DEFAULT_LEAD_TAB, isLeadTab, LeadTabs } from './lead-tabs';
+import { DEFAULT_LEAD_TAB, LeadTabs, toLeadTab } from './lead-tabs';
 
 export const metadata = { title: 'লিড বিস্তারিত' };
 
@@ -163,23 +163,20 @@ export default async function LeadDetailPage({
   const canEdit = can(user.role, 'lead:edit');
   const canUpload = can(user.role, 'document:upload');
   const canManageChecklist = can(user.role, 'checklist:manage');
-  // PRD সেকশন ৪ — বিলিং ট্যাব শুধু যারা লেজার দেখতে পারেন; তৈরি করতে পারেন
+  // PRD সেকশন ৪ — লেজার ট্যাব শুধু যারা লেজার দেখতে পারেন; তৈরি করতে পারেন
   // শুধু ADMIN ও ACCOUNTS (`ledger:manage`), MARKETING read-only
   const canViewLedger = can(user.role, 'ledger:view');
   const canManageLedger = can(user.role, 'ledger:manage');
   const viewAll = can(user.role, 'lead:viewAll');
   const executives = canEdit ? await findAssignableExecutives() : [];
 
-  const requestedTab = isLeadTab(searchParams.tab) ? searchParams.tab : DEFAULT_LEAD_TAB;
-  // অনুমতি না থাকলে বিলিং ট্যাবটি নেই — URL এ হাতে লিখলেও সারসংক্ষেপে ফিরে যায়
-  const tab = requestedTab === 'billing' && !canViewLedger ? DEFAULT_LEAD_TAB : requestedTab;
+  const requestedTab = toLeadTab(searchParams.tab);
+  // অনুমতি না থাকলে লেজার ট্যাবটি নেই — URL এ হাতে লিখলেও সারসংক্ষেপে ফিরে যায়
+  const tab = requestedTab === 'ledger' && !canViewLedger ? DEFAULT_LEAD_TAB : requestedTab;
 
   // লেজারটি শুধু তখনই লোড হয় যখন ট্যাবটি খোলা ও অনুমতি আছে — অন্য ট্যাবে
   // অপ্রয়োজনীয় কুয়েরি চলে না, আর ডেটাটি ব্রাউজারেও যায় না
-  const ledger =
-    tab === 'billing' && canViewLedger
-      ? await loadLeadLedger(lead.id, { name: lead.name, phone: lead.phone })
-      : null;
+  const ledger = tab === 'ledger' && canViewLedger ? await loadClientLedger(lead.id) : null;
 
   const today = startOfToday();
   const residence = countryLabel(lead.residenceCountry);
@@ -317,7 +314,7 @@ export default async function LeadDetailPage({
           { id: 'overview', label: 'সারসংক্ষেপ' },
           { id: 'checklist', label: 'চেকলিস্ট', count: checklistItems.length },
           ...(canViewLedger
-            ? ([{ id: 'billing', label: 'বিলিং / লেজার' }] as const)
+            ? ([{ id: 'ledger', label: 'ক্লায়েন্ট লেজার' }] as const)
             : ([] as const)),
         ]}
       />
@@ -511,17 +508,17 @@ export default async function LeadDetailPage({
         </Card>
       ) : null}
 
-      {tab === 'billing' && ledger ? (
+      {tab === 'ledger' && ledger ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">বিলিং ও ইন্টারনাল কস্ট</CardTitle>
+            <CardTitle className="text-base">ক্লায়েন্ট লেজার</CardTitle>
             <p className="text-sm text-muted-foreground">
               সাইট ভিজিট, সার্ভে, সয়েল টেস্ট, ডিজাইন ও সরকারি অনুমোদনের বিল এবং তার বিপরীতে
-              Orion এর খরচ — Won হওয়ার আগেও এখানে লেখা যায় (PRD সেকশন ৫.২)।
+              Orion এর খরচ — Won হওয়ার আগেও এখানে লেখা যায় (PRD সেকশন ৫.২ ও ৫.৬)।
             </p>
           </CardHeader>
           <CardContent>
-            <BillingSection
+            <ClientLedger
               leadId={lead.id}
               entries={ledger.entries}
               summary={ledger.summary}

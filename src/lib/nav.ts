@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Banknote,
   BarChart3,
+  BookOpen,
   Building2,
   CalendarClock,
   CreditCard,
@@ -103,6 +104,8 @@ export const PANELS: Record<string, Panel> = {
         matchPrefixes: ['/accounts/schedule'],
       },
       { label: 'পেমেন্ট এন্ট্রি', href: '/accounts/payments', icon: Banknote },
+      // PRD সেকশন ৫.৬ — client-wise ও company-wide আয়/খরচ
+      { label: 'লেজার', href: '/accounts/ledger', icon: BookOpen },
       { label: 'ওভারডিউ রিপোর্ট', href: '/accounts/overdue', icon: Receipt },
     ],
   },

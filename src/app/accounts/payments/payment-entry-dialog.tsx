@@ -27,6 +27,7 @@ import {
 import { formatBDT } from '@/lib/utils';
 import { validate } from '@/lib/validations/form';
 import { paymentEntrySchema } from '@/lib/validations/payment';
+import { WhatsAppSendButton } from '@/components/whatsapp';
 import { listPayableInstallments, recordPayment, type PayableInstallment } from './actions';
 
 /**
@@ -74,7 +75,11 @@ export function PaymentEntryDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [loading, startLoading] = useTransition();
-  const [done, setDone] = useState<{ paymentId: string; receiptNo: string } | null>(null);
+  const [done, setDone] = useState<{
+    paymentId: string;
+    receiptNo: string;
+    whatsAppUrl: string | null;
+  } | null>(null);
   /** কোন প্রজেক্টের কিস্তি তালিকা ইতিমধ্যে আনা হয়েছে — একই কল বারবার ঠেকাতে */
   const [fetchedFor, setFetchedFor] = useState<string | null>(
     initialInstallments ? (initialProjectId ?? null) : null,
@@ -218,7 +223,7 @@ export function PaymentEntryDialog({
           <DialogTitle>{done ? 'পেমেন্ট জমা হয়েছে' : 'পেমেন্ট এন্ট্রি'}</DialogTitle>
           <DialogDescription>
             {done
-              ? `রসিদ নম্বর ${done.receiptNo} — নিচের বোতাম থেকে প্রিন্ট বা PDF করে নিন।`
+              ? `রসিদ নম্বর ${done.receiptNo} — প্রিন্ট/PDF করুন বা সরাসরি WhatsApp এ পাঠান।`
               : 'কিস্তি বেছে প্রাপ্ত টাকা, মাধ্যম ও রসিদ নম্বর দিন।'}
           </DialogDescription>
         </DialogHeader>
@@ -232,10 +237,21 @@ export function PaymentEntryDialog({
                 পেয়েছেন।
               </p>
             </div>
+            {/* PRD সেকশন ৫.২ — MVP তে `wa.me` deep-link: prefilled মেসেজ খোলে,
+                রসিদ PDF ম্যানুয়ালি অ্যাটাচ করতে হয়। কাস্টমারের ফোন নম্বর না
+                থাকলে বোতামটি আসে না */}
             <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 বন্ধ করুন
               </Button>
+              <WhatsAppSendButton
+                url={done.whatsAppUrl}
+                entity="payment"
+                id={done.paymentId}
+                label="WhatsApp এ পাঠান"
+                size="default"
+                variant="secondary"
+              />
               <Button asChild>
                 <Link href={`/receipts/${done.paymentId}`} target="_blank">
                   <Printer className="mr-2 h-4 w-4" />

@@ -1,12 +1,16 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { format } from 'date-fns';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
 import {
   AlertTriangle,
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
   Banknote,
+  BookOpen,
   CalendarClock,
   CheckCircle2,
+  Scale,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
@@ -16,10 +20,12 @@ import {
   loadCollectionKpi,
   markOverdueInstallments,
 } from '@/lib/payment-data';
+import { loadCompanyLedgerSummary, loadMonthlyLedgerTrend } from '@/lib/ledger-data';
 import { cn, formatBDT } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AgingSummary, OverdueTable } from '@/components/payment-schedule';
+import { LedgerTrendChart } from './ledger-trend-chart';
 import { OverdueSweepButton } from './payments/overdue-sweep-button';
 
 export const metadata = { title: 'অ্যাকাউন্টস ড্যাশবোর্ড' };
@@ -27,9 +33,15 @@ export const metadata = { title: 'অ্যাকাউন্টস ড্যা
 /** ড্যাশবোর্ডে সবচেয়ে পুরনো কতগুলো বকেয়া দেখানো হবে (পুরো তালিকা ওভারডিউ পেজে) */
 const OVERDUE_PREVIEW = 8;
 
+/** লেজার চার্টে কত মাসের প্রবণতা */
+const TREND_MONTHS = 6;
+
 /**
- * PRD সেকশন ৫.৩ — Accounts ড্যাশবোর্ড: Total Receivable / Collected / Overdue
+ * PRD সেকশন ৫.৫ — Accounts ড্যাশবোর্ড: Total Receivable / Collected / Overdue
  * এর KPI ও aging report (0-15 / 16-30 / 30+ দিন)।
+ *
+ * সঙ্গে PRD সেকশন ৫.৬ এর company-wide মাসিক Income vs Expense সামারি — লেজারের
+ * সব এন্ট্রি নিয়ে (ক্লায়েন্টে ট্যাগ করা থাকুক বা না থাকুক)।
  */
 export default async function AccountsDashboard() {
   const accounts = await getAuthorizedUser('report:financial');
@@ -39,7 +51,12 @@ export default async function AccountsDashboard() {
   // ড্যাশবোর্ড খোলার সময়েই ওভারডিউ ডিটেকশন চলে — cron না থাকলেও সংখ্যা সঠিক
   await markOverdueInstallments(now);
 
-  const [kpi, aging] = await Promise.all([loadCollectionKpi(now), loadAgingReport(now)]);
+  const [kpi, aging, ledgerMonth, ledgerTrend] = await Promise.all([
+    loadCollectionKpi(now),
+    loadAgingReport(now),
+    loadCompanyLedgerSummary(startOfMonth(now), endOfMonth(now)),
+    loadMonthlyLedgerTrend(now, TREND_MONTHS),
+  ]);
 
   const monthLabel = format(now, 'MMMM yyyy');
   const collectedPercent =
@@ -105,6 +122,57 @@ export default async function AccountsDashboard() {
         </Card>
       ) : null}
 
+      {/* ------------------------------------- মাসিক আয় বনাম খরচ (লেজার) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">মাসিক আয় ও খরচ</CardTitle>
+              <CardDescription>
+                কোম্পানির পুরো লেজার — ক্লায়েন্টে ট্যাগ করা ও সাধারণ, সব এন্ট্রি মিলিয়ে
+                (PRD সেকশন ৫.৬)
+              </CardDescription>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/accounts/ledger">
+                লেজার খুলুন
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Kpi
+              icon={ArrowUpRight}
+              label={`এই মাসে আয় (${monthLabel})`}
+              value={formatBDT(ledgerMonth.billed)}
+              hint={`${ledgerMonth.incomeCount} টি এন্ট্রি`}
+              tone="text-emerald-700 dark:text-emerald-400"
+            />
+            <Kpi
+              icon={ArrowDownRight}
+              label="এই মাসে খরচ"
+              value={formatBDT(ledgerMonth.cost)}
+              hint={`${ledgerMonth.expenseCount} টি এন্ট্রি`}
+              tone="text-amber-700 dark:text-amber-500"
+            />
+            <Kpi
+              icon={Scale}
+              label="নিট (আয় − খরচ)"
+              value={formatBDT(ledgerMonth.net)}
+              hint={`${ledgerMonth.generalCount} টি ক্লায়েন্ট-ট্যাগ ছাড়া এন্ট্রি`}
+              tone={
+                ledgerMonth.net >= 0
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-destructive'
+              }
+            />
+          </div>
+          <LedgerTrendChart months={ledgerTrend} />
+        </CardContent>
+      </Card>
+
       {/* --------------------------------------------------- Aging report */}
       <Card>
         <CardHeader className="pb-3">
@@ -155,7 +223,7 @@ export default async function AccountsDashboard() {
       </Card>
 
       {/* ------------------------------------------------------ quick links */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <QuickLink
           href="/accounts/schedule"
           icon={CalendarClock}
@@ -167,6 +235,12 @@ export default async function AccountsDashboard() {
           icon={Banknote}
           title="পেমেন্ট এন্ট্রি"
           description="টাকা জমা নিন ও রসিদ প্রিন্ট করুন"
+        />
+        <QuickLink
+          href="/accounts/ledger"
+          icon={BookOpen}
+          title="লেজার"
+          description="আয়/খরচ এন্ট্রি — ক্লায়েন্ট-ভিত্তিক বা কোম্পানির সাধারণ"
         />
         <QuickLink
           href="/accounts/overdue"

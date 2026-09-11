@@ -256,8 +256,48 @@ cron (`/api/cron/overdue`, `CRON_SECRET` বেয়ারার টোকে�
 > হিসাব করে — `lib/phases.ts` এর ফেজ স্ট্যাটাসের মতোই। লেখা আর পড়া, দুই জায়গায় একই
 > ফাংশন, তাই cron না চললেও UI ভুল দেখায় না।
 
+**রসিদ WhatsApp এ পাঠানো** (PRD সেকশন ৫.২) — পেমেন্ট এন্ট্রির সফলতা প্যানেল, রসিদের
+পাতা ও সাম্প্রতিক পেমেন্ট তালিকা — তিন জায়গাতেই "WhatsApp এ পাঠান"। MVP তে এটি
+`wa.me` deep-link: prefilled বাংলা মেসেজ (রসিদ নম্বর, কিস্তি, অঙ্ক, তারিখ ও রসিদের
+লিংক) নিয়ে চ্যাট খোলে, PDF ম্যানুয়ালি অ্যাটাচ করতে হয়। লিংকটি server এ তৈরি হয়
+(`lib/whatsapp.ts`) — ফোন নম্বর না থাকলে বা অচল হলে `null`, তখন বোতামটি রেন্ডারই হয় না।
+পাঠানোর পর `Payment.whatsappSentAt` / `LedgerEntry.whatsappSentAt` এ চিহ্ন থাকে, তাই
+কোন রসিদ ইতিমধ্যে হাতে নেওয়া হয়েছে তা তালিকা দেখেই বোঝা যায়। পরের ফেজে 360dialog
+WhatsApp Business API দিয়ে auto-send যোগ হলে শুধু এই ফাইলটিই বদলাবে।
+
 প্রতিটি পেমেন্ট ও প্ল্যান পরিবর্তন `ActivityLog` এ যায় (`PAYMENT_RECEIVED`,
 `PAYMENT_PLAN_GENERATED`, `PAYMENT_PLAN_SAVED`, `OVERDUE_SWEEP`) — CLAUDE.md নিয়ম ৪।
+
+## ৫গ. অ্যাকাউন্টস লেজার (PRD সেকশন ৫.৬)
+
+একটাই `LedgerEntry` টেবিল দুই কাজে — `leadId` সেট থাকলে **client-wise**, না থাকলে
+**company-wide** সাধারণ এন্ট্রি (অফিস ভাড়া, বেতন)।
+
+**Client Ledger** — লিড ডিটেইলের **ক্লায়েন্ট লেজার** ট্যাব ও প্রজেক্ট ডিটেইল, দুই
+জায়গায় একই কম্পোনেন্ট (`components/ledger/client-ledger.tsx`), কারণ হিসাবটা লিড থেকে
+প্রজেক্ট পর্যন্ত একই `leadId` ধরে চলে। সামারি কার্ড চারটি: মোট **billed** (সার্ভিস বিল
++ কন্ট্রাক্টের কিস্তি), মোট **received** (সার্ভিস রসিদ + আদায় হওয়া কিস্তি), মোট
+**internal cost**, আর **net profit/loss** (billed − cost)।
+
+**Main Company Ledger** (`/accounts/ledger`) — আয়/খরচ এন্ট্রি, ক্লায়েন্ট ট্যাগ ঐচ্ছিক;
+মাস, ধরন, ক্যাটেগরি ও ক্লায়েন্ট ধরে ফিল্টার (সাধারণ GET ফর্ম, JS ছাড়াই চলে)। অ্যাকাউন্টস
+ড্যাশবোর্ডে চলতি মাসের Income vs Expense সামারি ও ৬ মাসের বার চার্ট — ট্যাগ করা ও
+ট্যাগহীন, সব এন্ট্রি নিয়ে।
+
+**🔒 ক্রিটিক্যাল নিয়ম — ক্লায়েন্ট কখনো খরচ দেখবে না** (PRD সেকশন ৪ ও ৭)। তিন স্তরে:
+
+1. `clientVisible` ফর্ম/ইনপুটে **নেই** — মানটি server এ `resolveClientVisible(type, leadId)`
+   থেকেই আসে (`lib/ledger.ts`), তাই সরাসরি অ্যাকশন ডেকেও `true` পাঠানো যায় না।
+   EXPENSE এ সবসময় `false`; `leadId` ছাড়া এন্ট্রিতেও `false`।
+2. কাস্টমারের কুয়েরি (`loadClientVisibleEntries`) DB লেভেলেই `type = INCOME` **এবং**
+   `clientVisible = true` — দুটোই চায়, অর্থাৎ ভুল ডেটা থাকলেও খরচ বেরোয় না।
+3. `/accounts/**` ও `ledger:view`/`ledger:manage` permission — CUSTOMER ও ENGINEER এর
+   কোনোটাই নেই (`lib/rbac.ts`)।
+
+তিনটিই `npm run test:ledger` এ যাচাই হয় (আসল DB তে, ২৪টি অ্যাসারশন)।
+
+প্রতিটি এন্ট্রি `ActivityLog` এ যায় (`LEDGER_INCOME_ADDED`, `LEDGER_EXPENSE_ADDED`,
+`LEDGER_ENTRY_DELETED`) — CLAUDE.md নিয়ম ৪।
 
 ## ৬. নতুন shadcn/ui কম্পোনেন্ট যোগ
 

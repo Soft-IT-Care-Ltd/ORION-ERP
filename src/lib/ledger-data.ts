@@ -1,15 +1,17 @@
-import { format } from 'date-fns';
+import { eachMonthOfInterval, endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
 import { LedgerType, type LedgerCategory, type Prisma, type Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
 import {
   formatLedgerReceiptNo,
   ledgerReceiptPrefix,
+  summarizeClientLedger,
   summarizeLedger,
-  whatsAppReceiptLink,
+  type ClientLedgerSummary,
   type LedgerSummary,
 } from '@/lib/ledger';
 import { LEDGER_CATEGORY_LABEL } from '@/lib/ledger';
+import { whatsAppReceiptLink } from '@/lib/whatsapp';
 import { formatBDT } from '@/lib/utils';
 
 /**
@@ -38,8 +40,13 @@ export type LedgerEntryView = {
   receiptNo: string | null;
   clientVisible: boolean;
   createdByName: string;
+  /** ক্লায়েন্টের সাথে ট্যাগ করা এন্ট্রি হলে সেই লিড — নইলে null (company-wide) */
+  leadId: string | null;
+  leadName: string | null;
   /** INCOME + রসিদ থাকলে `wa.me` deep-link, নইলে null (PRD সেকশন ৫.২) */
   whatsAppUrl: string | null;
+  /** আগে পাঠানো হয়েছিল কিনা — তালিকায় "পাঠানো হয়েছে" চিহ্ন */
+  whatsAppSentLabel: string | null;
 };
 
 export const ledgerEntrySelect = {
@@ -53,16 +60,25 @@ export const ledgerEntrySelect = {
   clientVisible: true,
   whatsappSentAt: true,
   createdBy: { select: { name: true } },
+  lead: { select: { id: true, name: true, phone: true } },
 } satisfies Prisma.LedgerEntrySelect;
 
 export type LedgerEntryRow = Prisma.LedgerEntryGetPayload<{ select: typeof ledgerEntrySelect }>;
 
+/**
+ * DB row → ভিউ।
+ *
+ * `wa.me` লিংকটি শুধু তখনই তৈরি হয় যখন কলার স্পষ্টভাবে `withWhatsApp` চায় —
+ * কাস্টমার পোর্টালের কুয়েরিতে (`loadClientVisibleEntries`) চাওয়া হয় না, কারণ
+ * রসিদ *পাঠানো* অ্যাকাউন্টসের কাজ, ক্লায়েন্টের নয়।
+ */
 export function toLedgerEntryView(
   row: LedgerEntryRow,
-  client?: { name: string; phone: string | null },
+  options?: { withWhatsApp?: boolean },
 ): LedgerEntryView {
   const amount = Number(row.amount);
   const categoryLabel = LEDGER_CATEGORY_LABEL[row.category];
+  const dateLabel = format(row.date, 'dd MMM yyyy');
 
   return {
     id: row.id,
@@ -71,22 +87,25 @@ export function toLedgerEntryView(
     categoryLabel,
     amount,
     amountLabel: formatBDT(amount),
-    dateLabel: format(row.date, 'dd MMM yyyy'),
+    dateLabel,
     note: row.note,
     receiptNo: row.receiptNo,
     clientVisible: row.clientVisible,
     createdByName: row.createdBy.name,
+    leadId: row.lead?.id ?? null,
+    leadName: row.lead?.name ?? null,
     whatsAppUrl:
-      row.type === LedgerType.INCOME && row.receiptNo && client
+      options?.withWhatsApp && row.type === LedgerType.INCOME && row.receiptNo && row.lead
         ? whatsAppReceiptLink({
-            phone: client.phone,
-            clientName: client.name,
+            phone: row.lead.phone,
+            clientName: row.lead.name,
             receiptNo: row.receiptNo,
             categoryLabel,
             amountLabel: formatBDT(amount),
-            dateLabel: format(row.date, 'dd MMM yyyy'),
+            dateLabel,
           })
         : null,
+    whatsAppSentLabel: row.whatsappSentAt ? format(row.whatsappSentAt, 'dd MMM yyyy') : null,
   };
 }
 
@@ -102,18 +121,68 @@ export type LeadLedger = {
  * শুধু `ledger:view` আছে এমন role এই ফাংশনটি ডাকে (Admin/Accounts/Marketing);
  * কাস্টমার কখনো নয় — তার জন্য `loadClientVisibleEntries`।
  */
-export async function loadLeadLedger(
-  leadId: string,
-  client: { name: string; phone: string | null },
-): Promise<LeadLedger> {
+export async function loadLeadLedger(leadId: string): Promise<LeadLedger> {
   const rows = await prisma.ledgerEntry.findMany({
     where: { leadId },
     select: ledgerEntrySelect,
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
   });
 
-  const entries = rows.map((row) => toLedgerEntryView(row, client));
+  const entries = rows.map((row) => toLedgerEntryView(row, { withWhatsApp: true }));
   return { entries, summary: summarizeLedger(entries) };
+}
+
+/* --------------------------------------------------------- client view */
+
+export type ClientLedger = {
+  entries: LedgerEntryView[];
+  summary: ClientLedgerSummary;
+  /** Won হয়ে থাকলে সেই প্রজেক্ট — সামারি কার্ডে "কন্ট্রাক্ট" অংশটি তখনই আসে */
+  project: { id: string; title: string } | null;
+};
+
+/**
+ * Lead/Project ডিটেইলের **Client Ledger** ট্যাব — PRD সেকশন ৫.৬ (১)।
+ *
+ * `loadLeadLedger` এর সব এন্ট্রি, সঙ্গে কনস্ট্রাকশন কন্ট্রাক্টের কিস্তি ও আদায়
+ * মিলিয়ে মোট billed / received / internal cost / net profit।
+ *
+ * শুধু `ledger:view` আছে এমন role ই ডাকে — কাস্টমার কখনো নয় (এখানে EXPENSE ও
+ * থাকে)।
+ */
+export async function loadClientLedger(leadId: string): Promise<ClientLedger> {
+  const [{ entries }, project] = await Promise.all([
+    loadLeadLedger(leadId),
+    prisma.project.findUnique({
+      where: { leadId },
+      select: {
+        id: true,
+        title: true,
+        paymentPlan: {
+          select: {
+            installments: {
+              select: { amount: true, payments: { select: { amountReceived: true } } },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const installments = project?.paymentPlan?.installments ?? [];
+  const contract = {
+    total: installments.reduce((sum, i) => sum + Number(i.amount), 0),
+    collected: installments.reduce(
+      (sum, i) => sum + i.payments.reduce((s, p) => s + Number(p.amountReceived), 0),
+      0,
+    ),
+  };
+
+  return {
+    entries,
+    summary: summarizeClientLedger(entries, contract),
+    project: project ? { id: project.id, title: project.title } : null,
+  };
 }
 
 /**
@@ -178,4 +247,145 @@ export async function loadCompanyLedgerSummary(
 
   const summary = summarizeLedger(rows.map((r) => ({ type: r.type, amount: Number(r.amount) })));
   return { ...summary, generalCount: rows.filter((r) => r.leadId === null).length };
+}
+
+/**
+ * PRD সেকশন ৫.৬ — কোম্পানি লেজারের তালিকা (ফিল্টারসহ)।
+ *
+ * `leadId` থাকুক বা না থাকুক — সব এন্ট্রি একসাথে; ফিল্টার দিয়ে মাস, ধরন,
+ * ক্যাটেগরি বা নির্দিষ্ট ক্লায়েন্টে সীমিত করা যায়। সামারিটি **ফিল্টার করা
+ * এন্ট্রিগুলোরই** (যা দেখা যাচ্ছে তারই যোগফল, নইলে বিভ্রান্তি হতো)।
+ */
+export type CompanyLedgerFilter = {
+  from: Date;
+  to: Date;
+  type?: LedgerType;
+  category?: LedgerCategory;
+  leadId?: string;
+  /** 'client' → শুধু ক্লায়েন্ট-ট্যাগ করা, 'general' → শুধু ট্যাগহীন */
+  tagged?: 'client' | 'general';
+  take?: number;
+};
+
+export type CompanyLedger = {
+  entries: LedgerEntryView[];
+  summary: CompanyLedgerSummary;
+  /** ফিল্টারে মোট কতগুলো এন্ট্রি (তালিকা `take` এ কাটা পড়তে পারে) */
+  totalCount: number;
+};
+
+export async function loadCompanyLedger(filter: CompanyLedgerFilter): Promise<CompanyLedger> {
+  const where: Prisma.LedgerEntryWhereInput = {
+    date: { gte: filter.from, lte: filter.to },
+    ...(filter.type ? { type: filter.type } : {}),
+    ...(filter.category ? { category: filter.category } : {}),
+    ...(filter.leadId ? { leadId: filter.leadId } : {}),
+    ...(filter.tagged === 'client' ? { NOT: { leadId: null } } : {}),
+    ...(filter.tagged === 'general' ? { leadId: null } : {}),
+  };
+
+  const [rows, totalCount] = await Promise.all([
+    prisma.ledgerEntry.findMany({
+      where,
+      select: ledgerEntrySelect,
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: filter.take ?? 100,
+    }),
+    prisma.ledgerEntry.count({ where }),
+  ]);
+
+  // সামারিটি পুরো ফিল্টারের (তালিকা কাটা পড়লেও যোগফল ঠিক থাকে)
+  const all = await prisma.ledgerEntry.findMany({
+    where,
+    select: { type: true, amount: true, leadId: true },
+  });
+
+  const summary = summarizeLedger(all.map((r) => ({ type: r.type, amount: Number(r.amount) })));
+
+  return {
+    entries: rows.map((row) => toLedgerEntryView(row, { withWhatsApp: true })),
+    summary: { ...summary, generalCount: all.filter((r) => r.leadId === null).length },
+    totalCount,
+  };
+}
+
+/* ------------------------------------------------------ monthly trend */
+
+export type LedgerMonth = {
+  /** `2026-09` — কী হিসেবে */
+  key: string;
+  /** `Sep 26` — চার্টের অক্ষে */
+  label: string;
+  income: number;
+  expense: number;
+  net: number;
+};
+
+/**
+ * PRD সেকশন ৫.৬ — ড্যাশবোর্ডের "মাসিক Total Income vs Total Expense"।
+ * `leadId` থাকুক বা না থাকুক, সব এন্ট্রি গোনা হয় (company-wide হিসাব)।
+ */
+export async function loadMonthlyLedgerTrend(now: Date, months = 6): Promise<LedgerMonth[]> {
+  const from = startOfMonth(subMonths(now, months - 1));
+  const to = endOfMonth(now);
+
+  const rows = await prisma.ledgerEntry.findMany({
+    where: { date: { gte: from, lte: to } },
+    select: { type: true, amount: true, date: true },
+  });
+
+  const buckets = new Map<string, LedgerMonth>();
+  for (const month of eachMonthOfInterval({ start: from, end: to })) {
+    const key = format(month, 'yyyy-MM');
+    buckets.set(key, { key, label: format(month, 'MMM yy'), income: 0, expense: 0, net: 0 });
+  }
+
+  for (const row of rows) {
+    const bucket = buckets.get(format(row.date, 'yyyy-MM'));
+    if (!bucket) continue;
+    if (row.type === LedgerType.INCOME) bucket.income += Number(row.amount);
+    else bucket.expense += Number(row.amount);
+  }
+
+  return [...buckets.values()].map((bucket) => ({
+    ...bucket,
+    net: bucket.income - bucket.expense,
+  }));
+}
+
+/* -------------------------------------------------------- lead options */
+
+export type LedgerLeadOption = {
+  id: string;
+  name: string;
+  /** "মোঃ রহিম — সোনাডাঙ্গা" ধরনের দ্বিতীয় লাইন */
+  hint: string | null;
+  /** Won হয়ে প্রজেক্ট হয়ে গেছে কিনা */
+  hasProject: boolean;
+};
+
+/**
+ * লেজার এন্ট্রিতে ক্লায়েন্ট ট্যাগ করার ড্রপডাউন (PRD সেকশন ৫.৬)।
+ * Lost লিড বাদ — সেখানে নতুন বিল/খরচ বসানোর কথা নয়।
+ */
+export async function listLedgerLeadOptions(): Promise<LedgerLeadOption[]> {
+  const rows = await prisma.lead.findMany({
+    where: { stage: { not: 'LOST' } },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      projectLocation: true,
+      project: { select: { id: true } },
+    },
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 500,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    hint: row.projectLocation ?? row.phone,
+    hasProject: row.project !== null,
+  }));
 }

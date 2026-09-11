@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
 import { logActivity } from '@/lib/activity-log';
 import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action-result';
-import { LEDGER_CATEGORY_LABEL, LEDGER_TYPE_SHORT } from '@/lib/ledger';
+import { LEDGER_CATEGORY_LABEL, LEDGER_TYPE_SHORT, resolveClientVisible } from '@/lib/ledger';
 import { nextLedgerReceiptNo } from '@/lib/ledger-data';
 import { formatBDT } from '@/lib/utils';
 import { ledgerEntryIdSchema, ledgerEntrySchema } from '@/lib/validations/ledger';
@@ -14,18 +14,31 @@ import { ledgerEntryIdSchema, ledgerEntrySchema } from '@/lib/validations/ledger
 export type { ActionResult } from '@/lib/action-result';
 
 /**
- * LedgerEntry তৈরি/মোছা — PRD সেকশন ৫.২ ও ৫.৬।
+ * LedgerEntry তৈরি/মোছা — PRD সেকশন ৫.২ (pre-project billing ও internal cost)
+ * এবং ৫.৬ (company-wide ledger)।
  *
- * **শুধু `ledger:manage` (ADMIN ও ACCOUNTS)** এই অ্যাকশনগুলো চালাতে পারে।
- * MARKETING এর কাছে `ledger:view` আছে, তাই সে তালিকা দেখে কিন্তু লিখতে পারে না —
- * UI তে ফর্মটাই দেখানো হয় না, আর অ্যাকশনটি সরাসরি ডাকলেও এখানে আটকে যায়।
+ * অ্যাকশনগুলো তিন জায়গা থেকে ডাকা হয় — লিড ডিটেইলের Client Ledger ট্যাব,
+ * প্রজেক্ট ডিটেইল ও `/accounts/ledger` — তাই কম্পোনেন্টের পাশেই (route folder
+ * এ নয়), `components/layout/notification-actions.ts` এর মতো।
+ *
+ * **শুধু `ledger:manage` (ADMIN ও ACCOUNTS)** এগুলো চালাতে পারে। MARKETING এর
+ * কাছে `ledger:view` আছে, তাই সে তালিকা দেখে কিন্তু লিখতে পারে না — UI তে
+ * ফর্মটাই দেখানো হয় না, আর অ্যাকশনটি সরাসরি ডাকলেও এখানে আটকে যায়।
  */
 
-/** রসিদ নম্বরের সংঘর্ষ হলে (একই সেকেন্ডে দুটি এন্ট্রি) কতবার আবার চেষ্টা হবে */
+/** রসিদ নম্বরের সংঘর্ষ হলে (একই দিনে দুটি এন্ট্রি একসাথে) কতবার আবার চেষ্টা হবে */
 const RECEIPT_RETRIES = 3;
 
-function revalidateLedger(leadId: string | null) {
-  if (leadId) revalidatePath(`/sales/leads/${leadId}`);
+async function revalidateLedger(leadId: string | null) {
+  if (leadId) {
+    revalidatePath(`/sales/leads/${leadId}`);
+    // Won হয়ে থাকলে প্রজেক্ট ডিটেইলের Client Ledger কার্ডটিও বাসি হয়ে যায়
+    const project = await prisma.project.findUnique({
+      where: { leadId },
+      select: { id: true },
+    });
+    if (project) revalidatePath(`/admin/projects/${project.id}`);
+  }
   revalidatePath('/accounts');
   revalidatePath('/accounts/ledger');
   revalidatePath('/admin');
@@ -62,8 +75,10 @@ export async function createLedgerEntry(input: {
   const isIncome = type === LedgerType.INCOME;
 
   for (let attempt = 0; attempt < RECEIPT_RETRIES; attempt += 1) {
-    // PRD সেকশন ৫.২ — client-facing income entry তেই শুধু রসিদ নম্বর
-    const receiptNo = isIncome ? await nextLedgerReceiptNo(date) : null;
+    // PRD সেকশন ৫.২ ও ৫.৬ — রসিদ নম্বর তখনই, যখন এন্ট্রিটি ক্লায়েন্টের কাছ
+    // থেকে পাওয়া আয় (INCOME + leadId)। ট্যাগহীন general income (যেমন ব্যাংক
+    // সুদ) কোনো ক্লায়েন্টকে দেওয়ার মতো রসিদ নয়
+    const receiptNo = isIncome && leadId ? await nextLedgerReceiptNo(date) : null;
 
     try {
       const entry = await prisma.ledgerEntry.create({
@@ -75,10 +90,10 @@ export async function createLedgerEntry(input: {
           date,
           note: note ?? null,
           receiptNo,
-          // PRD সেকশন ৪ — EXPENSE কখনোই ক্লায়েন্ট দেখবে না। মানটি ইনপুট থেকে
-          // আসে না, `type` থেকেই ঠিক হয়; আর leadId ছাড়া (company-wide) এন্ট্রি
-          // কোনো ক্লায়েন্টের পোর্টালে দেখানোরই উপায় নেই
-          clientVisible: isIncome && leadId !== null,
+          // PRD সেকশন ৪ — EXPENSE কখনোই ক্লায়েন্ট দেখবে না, আর leadId ছাড়া
+          // (company-wide) এন্ট্রি কোনো ক্লায়েন্টের পোর্টালে দেখানোরই উপায় নেই।
+          // নিয়মটি `lib/ledger.ts` এ এক জায়গায় — ইনপুট থেকে কখনো আসে না
+          clientVisible: resolveClientVisible(type, leadId),
           createdById: actor.id,
         },
         select: { id: true, receiptNo: true },
@@ -98,7 +113,7 @@ export async function createLedgerEntry(input: {
         },
       });
 
-      revalidateLedger(leadId);
+      await revalidateLedger(leadId);
 
       const what = `${LEDGER_TYPE_SHORT[type]} · ${LEDGER_CATEGORY_LABEL[category]} · ${formatBDT(amount)}`;
       return {
@@ -160,33 +175,10 @@ export async function deleteLedgerEntry(input: { id: string }): Promise<ActionRe
       },
     });
 
-    revalidateLedger(entry.leadId);
+    await revalidateLedger(entry.leadId);
     return { ok: true, message: 'এন্ট্রি মুছে ফেলা হয়েছে' };
   } catch (error) {
     console.error('deleteLedgerEntry failed', error);
     return { ok: false, message: 'এন্ট্রি মোছা যায়নি' };
   }
-}
-
-/** "WhatsApp এ পাঠানো হয়েছে" চিহ্ন — deep-link খোলার পর UI এটি ডাকে */
-export async function markLedgerWhatsAppSent(input: { id: string }): Promise<ActionResult> {
-  const actor = await getAuthorizedUser('ledger:manage');
-  if (!actor) return FORBIDDEN;
-
-  const parsed = ledgerEntryIdSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: 'ইনপুট সঠিক নয়' };
-
-  const entry = await prisma.ledgerEntry.findUnique({
-    where: { id: parsed.data.id },
-    select: { id: true, leadId: true, type: true },
-  });
-  if (!entry || entry.type !== LedgerType.INCOME) return NOT_FOUND;
-
-  await prisma.ledgerEntry.update({
-    where: { id: entry.id },
-    data: { whatsappSentAt: new Date() },
-  });
-
-  revalidateLedger(entry.leadId);
-  return { ok: true, message: 'WhatsApp এ পাঠানো হিসেবে চিহ্নিত' };
 }

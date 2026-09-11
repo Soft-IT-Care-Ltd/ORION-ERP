@@ -13,9 +13,11 @@ import {
   PAYMENT_METHOD_LABEL,
   computeInstallmentStatus,
 } from '@/lib/payments';
+import { paymentReceiptWhatsAppLink } from '@/lib/payment-data';
 import { buildingTypeLabel } from '@/lib/leads';
 import { formatBDT } from '@/lib/utils';
 import { PrintButton } from '@/components/print-button';
+import { WhatsAppSendButton } from '@/components/whatsapp';
 
 export const metadata = { title: 'পেমেন্ট রসিদ' };
 
@@ -51,6 +53,7 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
       method: true,
       note: true,
       paidAt: true,
+      whatsappSentAt: true,
       receivedBy: { select: { name: true } },
       installment: {
         select: {
@@ -120,6 +123,22 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
     ? `/accounts/schedule/${project.id}`
     : '/customer/payments';
 
+  // PRD সেকশন ৫.২ — রসিদটি ক্লায়েন্টকে WhatsApp এ পাঠানো (deep-link)। এটি
+  // Accounts/Admin এর কাজ, তাই কাস্টমারের নিজের রসিদে বোতামটি আসে না
+  const whatsAppUrl = can(user.role, 'receipt:generate')
+    ? paymentReceiptWhatsAppLink({
+        paymentId: payment.id,
+        receiptNo: payment.receiptNo,
+        clientName: project.customer.user.name,
+        clientPhone: project.customer.user.phone,
+        projectTitle: project.title,
+        installmentLabel: payment.installment.label,
+        amount,
+        paidAt: payment.paidAt,
+        remaining: Math.max(0, installmentAmount - installmentPaid),
+      })
+    : null;
+
   return (
     <div className="mx-auto max-w-3xl space-y-3">
       <div className="print-hide flex items-center justify-between gap-3">
@@ -130,7 +149,18 @@ export default async function ReceiptPage({ params }: { params: { paymentId: str
           <ArrowLeft className="h-4 w-4" />
           ফিরে যান
         </Link>
-        <PrintButton />
+        <div className="flex items-center gap-2">
+          <WhatsAppSendButton
+            url={whatsAppUrl}
+            entity="payment"
+            id={payment.id}
+            label="WhatsApp এ পাঠান"
+            size="default"
+            variant="outline"
+            sentLabel={payment.whatsappSentAt ? format(payment.whatsappSentAt, 'dd MMM yyyy') : null}
+          />
+          <PrintButton />
+        </div>
       </div>
 
       <article className="print-sheet rounded-lg border bg-background p-6 shadow-sm sm:p-8">

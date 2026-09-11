@@ -14,7 +14,8 @@
     "db:seed": "prisma db seed",
     "db:deploy": "prisma migrate deploy",
     "test:validations": "tsx scripts/check-validations.mts",
-    "test:storage": "tsx scripts/check-storage.mts"
+    "test:storage": "tsx scripts/check-storage.mts",
+    "test:ledger": "tsx scripts/check-ledger.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

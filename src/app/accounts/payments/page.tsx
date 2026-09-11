@@ -4,7 +4,7 @@ import { addDays, format, startOfDay } from 'date-fns';
 import { Printer } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
-import { markOverdueInstallments } from '@/lib/payment-data';
+import { markOverdueInstallments, paymentReceiptWhatsAppLink } from '@/lib/payment-data';
 import {
   computeInstallmentStatus,
   INSTALLMENT_STATUS_BADGE,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/payments';
 import { cn, formatBDT } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { WhatsAppSendButton } from '@/components/whatsapp';
 import { PaymentEntryButton, type ProjectOption } from './payment-entry-dialog';
 import { OverdueSweepButton } from './overdue-sweep-button';
 
@@ -69,17 +70,21 @@ export default async function PaymentsPage() {
         method: true,
         note: true,
         paidAt: true,
+        whatsappSentAt: true,
         receivedBy: { select: { name: true } },
         installment: {
           select: {
             label: true,
+            amount: true,
+            payments: { select: { amountReceived: true } },
             paymentPlan: {
               select: {
                 project: {
                   select: {
                     id: true,
                     title: true,
-                    customer: { select: { user: { select: { name: true } } } },
+                    // রসিদ WhatsApp এ পাঠাতে নম্বরটি লাগে (PRD সেকশন ৫.২)
+                    customer: { select: { user: { select: { name: true, phone: true } } } },
                   },
                 },
               },
@@ -242,17 +247,32 @@ export default async function PaymentsPage() {
                 <tbody>
                   {recentPayments.map((payment) => {
                     const project = payment.installment.paymentPlan.project;
+                    const installmentPaid = payment.installment.payments.reduce(
+                      (sum, p) => sum + Number(p.amountReceived),
+                      0,
+                    );
+                    const whatsAppUrl = paymentReceiptWhatsAppLink({
+                      paymentId: payment.id,
+                      receiptNo: payment.receiptNo,
+                      clientName: project.customer.user.name,
+                      clientPhone: project.customer.user.phone,
+                      projectTitle: project.title,
+                      installmentLabel: payment.installment.label,
+                      amount: Number(payment.amountReceived),
+                      paidAt: payment.paidAt,
+                      remaining: Math.max(0, Number(payment.installment.amount) - installmentPaid),
+                    });
                     return (
                       <tr key={payment.id} className="border-b last:border-0 [&>td]:px-3 [&>td]:py-2">
                         <td className="whitespace-nowrap font-medium">{payment.receiptNo}</td>
-                        <td>
+                        <td className="min-w-[9rem]">
                           <Link
                             href={`/accounts/schedule/${project.id}`}
-                            className="hover:underline"
+                            className="whitespace-nowrap hover:underline"
                           >
                             {project.customer.user.name}
                           </Link>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
                             {project.title}
                           </p>
                         </td>
@@ -273,14 +293,29 @@ export default async function PaymentsPage() {
                           {formatBDT(Number(payment.amountReceived))}
                         </td>
                         <td className="text-right">
-                          <Link
-                            href={`/receipts/${payment.id}`}
-                            target="_blank"
-                            className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                            রসিদ
-                          </Link>
+                          <div className="flex items-center justify-end gap-2">
+                            {/* সরু সারি — শুধু আইকন, লেখাটি tooltip/aria-label এ */}
+                            <WhatsAppSendButton
+                              url={whatsAppUrl}
+                              entity="payment"
+                              id={payment.id}
+                              iconOnly
+                              label="রসিদ WhatsApp এ পাঠান"
+                              sentLabel={
+                                payment.whatsappSentAt
+                                  ? format(payment.whatsappSentAt, 'dd MMM yyyy')
+                                  : null
+                              }
+                            />
+                            <Link
+                              href={`/receipts/${payment.id}`}
+                              target="_blank"
+                              className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                              রসিদ
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );

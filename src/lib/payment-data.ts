@@ -13,6 +13,8 @@ import {
   type InstallmentView,
   type PlanSummary,
 } from '@/lib/payments';
+import { whatsAppPaymentReceiptLink } from '@/lib/whatsapp';
+import { formatBDT } from '@/lib/utils';
 
 /**
  * Payment plan / collection এর DB অংশ — Admin, Accounts ও Customer, তিন প্যানেলেই
@@ -352,6 +354,45 @@ export async function loadCollectionKpi(now = new Date()): Promise<CollectionKpi
     outstanding: Math.max(0, planTotal - planCollected),
     plansPending,
   };
+}
+
+/* ---------------------------------------------------------- WhatsApp */
+
+/**
+ * কিস্তির রসিদটি ক্লায়েন্টকে WhatsApp এ পাঠানোর `wa.me` লিংক — PRD সেকশন ৫.২
+ * ও ৫.৫ (MVP: deep-link, PDF ম্যানুয়ালি অ্যাটাচ)।
+ *
+ * তিন জায়গা থেকে ডাকা হয় — পেমেন্ট এন্ট্রির সফলতা প্যানেল, পেমেন্ট তালিকার সারি
+ * ও রসিদের পাতা — তাই মেসেজ তৈরির নিয়মটি এখানে এক জায়গায়। ফোন নম্বর না থাকলে
+ * (বা অচল হলে) `null`, তখন UI বোতামটি দেখায় না।
+ */
+export function paymentReceiptWhatsAppLink(params: {
+  paymentId: string;
+  receiptNo: string;
+  clientName: string;
+  clientPhone: string | null;
+  projectTitle?: string | null;
+  installmentLabel: string;
+  amount: number;
+  paidAt: Date;
+  /** এই কিস্তিতে এখনো বাকি — ০ হলে মেসেজে লাইনটি যায় না */
+  remaining?: number;
+}): string | null {
+  // রসিদের প্রিন্ট পেজের পূর্ণ ঠিকানা — কাস্টমার লগইন করে নিজেই PDF নামাতে পারেন
+  const base = process.env.NEXTAUTH_URL?.replace(/\/$/, '');
+
+  return whatsAppPaymentReceiptLink({
+    phone: params.clientPhone,
+    clientName: params.clientName,
+    receiptNo: params.receiptNo,
+    projectTitle: params.projectTitle ?? null,
+    installmentLabel: params.installmentLabel,
+    amountLabel: formatBDT(params.amount),
+    dateLabel: format(params.paidAt, 'dd MMM yyyy'),
+    remainingLabel:
+      params.remaining && params.remaining > 0 ? formatBDT(params.remaining) : null,
+    receiptUrl: base ? `${base}/receipts/${params.paymentId}` : null,
+  });
 }
 
 /* ----------------------------------------------------------- receipt */

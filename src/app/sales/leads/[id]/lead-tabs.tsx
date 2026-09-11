@@ -8,12 +8,18 @@ import { cn } from '@/lib/utils';
  * প্রতিটি প্যানেল server component হিসেবেই রেন্ডার হয় — বিলিং তালিকা তাই কখনো
  * ব্রাউজারে যায় না যদি ইউজারের সেটি দেখার অনুমতি না থাকে।
  */
-export type LeadTab = 'overview' | 'checklist' | 'billing';
+export type LeadTab = 'overview' | 'checklist' | 'ledger';
 
 export const DEFAULT_LEAD_TAB: LeadTab = 'overview';
 
-export function isLeadTab(value: string | undefined): value is LeadTab {
-  return value === 'overview' || value === 'checklist' || value === 'billing';
+/**
+ * URL এর `?tab=` → ট্যাব। `billing` ছিল লেজার ট্যাবের আগের নাম — পুরনো
+ * লিংক/বুকমার্ক যেন ভেঙে না যায়, তাই সেটিও এখানে মেনে নেওয়া হয়।
+ */
+export function toLeadTab(value: string | undefined): LeadTab {
+  if (value === 'checklist') return 'checklist';
+  if (value === 'ledger' || value === 'billing') return 'ledger';
+  return DEFAULT_LEAD_TAB;
 }
 
 export function LeadTabs({

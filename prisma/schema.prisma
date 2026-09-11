@@ -371,6 +371,10 @@ model Payment {
   receivedBy     User          @relation("ReceivedByUser", fields: [receivedById], references: [id])
   receivedById   String
   paidAt         DateTime      @default(now())
+  // রসিদটি ক্লায়েন্টকে WhatsApp এ পাঠানো হয়েছে কিনা (PRD সেকশন ৫.২ — wa.me
+  // deep-link MVP)। `LedgerEntry.whatsappSentAt` এর মতোই — কোন রসিদ পাঠানো
+  // হয়েছে তা তালিকা দেখেই বোঝা যায়
+  whatsappSentAt DateTime?
 
   @@index([installmentId, paidAt])
   @@index([paidAt])

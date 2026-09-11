@@ -8,7 +8,11 @@ import { logActivity } from '@/lib/activity-log';
 import { notify } from '@/lib/notifications';
 import { type ActionResult, FORBIDDEN, NOT_FOUND, zodErrors } from '@/lib/action-result';
 import { computeInstallmentStatus } from '@/lib/payments';
-import { markOverdueInstallments, nextReceiptNo } from '@/lib/payment-data';
+import {
+  markOverdueInstallments,
+  nextReceiptNo,
+  paymentReceiptWhatsAppLink,
+} from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
 import { paymentEntrySchema, projectIdSchema } from '@/lib/validations/payment';
 
@@ -42,7 +46,7 @@ function revalidatePayments(projectId?: string) {
  */
 export async function recordPayment(
   input: unknown,
-): Promise<ActionResult<{ paymentId: string; receiptNo: string }>> {
+): Promise<ActionResult<{ paymentId: string; receiptNo: string; whatsAppUrl: string | null }>> {
   const accounts = await getAuthorizedUser('payment:create');
   if (!accounts) return FORBIDDEN;
 
@@ -66,7 +70,11 @@ export async function recordPayment(
           project: {
             select: {
               id: true,
-              customer: { select: { userId: true } },
+              title: true,
+              // রসিদ WhatsApp এ পাঠানোর জন্য (PRD সেকশন ৫.২)
+              customer: {
+                select: { userId: true, user: { select: { name: true, phone: true } } },
+              },
             },
           },
         },
@@ -163,7 +171,22 @@ export async function recordPayment(
           left > 0
             ? `${formatBDT(amountReceived)} জমা হলো — এই কিস্তিতে আরও ${formatBDT(left)} বাকি`
             : `${formatBDT(amountReceived)} জমা হলো — কিস্তিটি সম্পূর্ণ পরিশোধিত`,
-        data: { paymentId: payment.id, receiptNo: payment.receiptNo },
+        data: {
+          paymentId: payment.id,
+          receiptNo: payment.receiptNo,
+          // ফর্মটি সঙ্গে সঙ্গেই "WhatsApp এ পাঠান" দেখাতে পারে — নম্বর না থাকলে null
+          whatsAppUrl: paymentReceiptWhatsAppLink({
+            paymentId: payment.id,
+            receiptNo: payment.receiptNo,
+            clientName: project.customer.user.name,
+            clientPhone: project.customer.user.phone,
+            projectTitle: project.title,
+            installmentLabel: installment.label,
+            amount: amountReceived,
+            paidAt,
+            remaining: left,
+          }),
+        },
       };
     } catch (error) {
       lastError = error;

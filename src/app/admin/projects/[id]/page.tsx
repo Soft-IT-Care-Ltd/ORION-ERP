@@ -4,9 +4,11 @@ import { format } from 'date-fns';
 import { ArrowLeft, ExternalLink, HardHat, MapPin, UserRound, Video, Wallet } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getAuthorizedUser } from '@/lib/guards';
+import { can } from '@/lib/rbac';
 import { findAssignableEngineers } from '@/lib/project-access';
 import { loadProjectTimeline } from '@/lib/phase-data';
 import { loadProjectPlan } from '@/lib/payment-data';
+import { loadClientLedger } from '@/lib/ledger-data';
 import { buildingTypeLabel } from '@/lib/leads';
 import { isEmbeddableStreamUrl, PROJECT_STATUS_BADGE, PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { cn, formatBDT } from '@/lib/utils';
@@ -16,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhaseProgressSummary, PhaseTimeline, PhaseUpdateLog } from '@/components/phase-timeline';
 import { PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
+import { ClientLedger } from '@/components/ledger';
 import { ApplyTemplateButton } from '../apply-template-button';
 import { ProjectRowActions } from '../project-row-actions';
 import type { EditableProject, EngineerOption } from '../project-edit-dialog';
@@ -60,9 +63,12 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
 
   if (!project) notFound();
 
-  const [timeline, plan] = await Promise.all([
+  // PRD সেকশন ৫.৬ — প্রজেক্টের হিসাব লিডের সাথেই বাঁধা (একই `leadId`), তাই
+  // Won হওয়ার আগের সার্ভিস বিল ও খরচও এখানেই দেখা যায়
+  const [timeline, plan, ledger] = await Promise.all([
     loadProjectTimeline(project.id, now),
     loadProjectPlan(project.id, now),
+    loadClientLedger(project.lead.id),
   ]);
 
   const engineers = engineerRows as EngineerOption[];
@@ -294,6 +300,26 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
           </CardContent>
         </Card>
       ) : null}
+
+      {/* PRD সেকশন ৫.৬ — Client Ledger: বিল, আদায়, ইন্টারনাল কস্ট ও মার্জিন।
+          লিড ডিটেইলের ট্যাবে এই একই কম্পোনেন্টটিই বসে */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">ক্লায়েন্ট লেজার</CardTitle>
+          <CardDescription>
+            এই ক্লায়েন্টের সব হিসাব — Won হওয়ার আগের সার্ভিস বিল, কনস্ট্রাকশন কিস্তির আদায় ও
+            Orion এর ইন্টারনাল খরচ। কাস্টমার পোর্টালে খরচ/মার্জিন কখনো দেখানো হয় না।
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClientLedger
+            leadId={project.lead.id}
+            entries={ledger.entries}
+            summary={ledger.summary}
+            canManage={can(admin.role, 'ledger:manage')}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">
