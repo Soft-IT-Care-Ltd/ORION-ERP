@@ -189,8 +189,8 @@ export async function loadClientLedger(leadId: string): Promise<ClientLedger> {
  * কাস্টমার পোর্টালে দেখানোর মতো এন্ট্রি — PRD সেকশন ৫.৭।
  *
  * দুটো শর্তই DB তে: `type = INCOME` ও `clientVisible = true`। EXPENSE কখনো
- * `clientVisible` হতে পারে না (`lib/ledger-write.ts` এ enforce করা), কিন্তু
- * এখানে দ্বিতীয়বার যাচাই করা হয় — defence in depth।
+ * `clientVisible` হতে পারে না (`lib/ledger.ts` → `resolveClientVisible` এ
+ * enforce করা), কিন্তু এখানে দ্বিতীয়বার যাচাই করা হয় — defence in depth।
  */
 export async function loadClientVisibleEntries(leadId: string): Promise<LedgerEntryView[]> {
   const rows = await prisma.ledgerEntry.findMany({
@@ -200,6 +200,110 @@ export async function loadClientVisibleEntries(leadId: string): Promise<LedgerEn
   });
 
   return rows.map((row) => toLedgerEntryView(row));
+}
+
+/* ------------------------------------------------- service bill receipt */
+
+export type ServiceBillReceipt = {
+  id: string;
+  receiptNo: string;
+  categoryLabel: string;
+  amount: number;
+  date: Date;
+  note: string | null;
+  issuedByName: string;
+  client: {
+    name: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  };
+  /** Won হয়ে থাকলে কনস্ট্রাকশন জবটি — রসিদের "প্রজেক্ট" ঘরে */
+  project: { id: string; title: string; landLocation: string | null } | null;
+};
+
+/**
+ * প্রি-প্রজেক্ট সার্ভিস বিলের প্রিন্টযোগ্য রসিদ — PRD সেকশন ৫.২ ও ৫.৭
+ * ("downloadable invoice/receipt (PDF) — pre-project বিল ও construction
+ * installment দুটোই")।
+ *
+ * **নিরাপত্তা (PRD সেকশন ৪):** where-clause এ তিনটি শর্ত সবসময় থাকে —
+ * `type = INCOME`, `clientVisible = true` ও একটি রসিদ নম্বর। অর্থাৎ কোনো
+ * EXPENSE এর id সরাসরি URL এ বসিয়ে দিলেও কুয়েরিটি খালি ফেরত দেয়, role যাই হোক।
+ * তার উপরে কাস্টমারের জন্য ownership — এন্ট্রির লিডটি তার **নিজের প্রজেক্টের**
+ * লিড কিনা, সেটিও একই কুয়েরিতে (`lead.project.customer.userId`), যাতে অন্যের
+ * entry id আন্দাজ করেও রসিদ খোলা না যায়।
+ */
+export async function loadServiceBillReceipt(
+  entryId: string,
+  viewer: { id: string; role: Role },
+): Promise<ServiceBillReceipt | null> {
+  // Admin/Accounts যেকোনো ক্লায়েন্টের রসিদ ছাপাতে পারেন (`receipt:generate`);
+  // কাস্টমার শুধু নিজের প্রজেক্টের সঙ্গে বাঁধা লিডেরটি
+  const ownership: Prisma.LedgerEntryWhereInput = can(viewer.role, 'receipt:generate')
+    ? {}
+    : { lead: { project: { customer: { userId: viewer.id } } } };
+
+  const row = await prisma.ledgerEntry.findFirst({
+    where: {
+      id: entryId,
+      type: LedgerType.INCOME,
+      clientVisible: true,
+      receiptNo: { not: null },
+      ...ownership,
+    },
+    select: {
+      id: true,
+      category: true,
+      amount: true,
+      date: true,
+      note: true,
+      receiptNo: true,
+      createdBy: { select: { name: true } },
+      lead: {
+        select: {
+          name: true,
+          phone: true,
+          email: true,
+          projectLocation: true,
+          project: {
+            select: {
+              id: true,
+              title: true,
+              landLocation: true,
+              customer: { select: { address: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!row?.lead || !row.receiptNo) return null;
+
+  return {
+    id: row.id,
+    receiptNo: row.receiptNo,
+    categoryLabel: LEDGER_CATEGORY_LABEL[row.category],
+    amount: Number(row.amount),
+    date: row.date,
+    note: row.note,
+    issuedByName: row.createdBy.name,
+    client: {
+      name: row.lead.name,
+      phone: row.lead.phone,
+      email: row.lead.email,
+      // Won হয়ে থাকলে কাস্টমার প্রোফাইলের ঠিকানা, নইলে লিডের জমির অবস্থান
+      address: row.lead.project?.customer.address ?? row.lead.projectLocation,
+    },
+    project: row.lead.project
+      ? {
+          id: row.lead.project.id,
+          title: row.lead.project.title,
+          landLocation: row.lead.project.landLocation,
+        }
+      : null,
+  };
 }
 
 /** এই ইউজার কি লেজার এন্ট্রি *তৈরি* করতে পারবে? (Admin/Accounts — PRD সেকশন ৪) */

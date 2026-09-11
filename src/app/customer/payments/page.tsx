@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
-import { CreditCard, Info } from 'lucide-react';
+import { CreditCard, Info, Receipt } from 'lucide-react';
 import { auth } from '@/lib/auth';
-import { loadCustomerProjects } from '@/lib/customer-data';
-import { loadProjectPlan, markOverdueInstallments } from '@/lib/payment-data';
-import { paymentHistory } from '@/lib/payments';
+import { loadCustomerPayments } from '@/lib/customer-data';
+import { markOverdueInstallments } from '@/lib/payment-data';
 import { formatBDT } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PaymentHistory, PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
+// সরাসরি ফাইল থেকে — ব্যারেলে Admin/Accounts এর ফর্ম ও EXPENSE-সহ টেবিল আছে
+import { PreProjectBills } from '@/components/ledger/pre-project-bills';
 
 export const metadata = { title: 'পেমেন্ট' };
 
@@ -14,12 +15,14 @@ export const dynamic = 'force-dynamic';
 
 /**
  * PRD সেকশন ৫.৭ — কাস্টমার নিজের payment schedule ও payment history দেখেন,
- * সঙ্গে প্রতিটি পেমেন্টের ডাউনলোডযোগ্য রসিদ।
+ * সঙ্গে প্রতিটি পেমেন্টের ডাউনলোডযোগ্য রসিদ — কনস্ট্রাকশন কিস্তি ও প্রি-প্রজেক্ট
+ * সার্ভিস বিল, দুটোরই।
  *
  * `customer/progress/page.tsx` এর মতোই এখানে `PaymentScheduleTable` কে `actions`
  * ছাড়া ব্যবহার করা হয়েছে, তাই এটি সম্পূর্ণ read-only — কাস্টমার কিছু বদলাতে
- * পারেন না (PRD সেকশন ৪)। প্রজেক্টের তালিকা ড্যাশবোর্ডের মতোই
- * `lib/customer-data.ts` থেকে আসে, যাতে স্কোপ (নিজের প্রজেক্ট) এক জায়গাতেই ঠিক হয়।
+ * পারেন না (PRD সেকশন ৪)। ডেটা ড্যাশবোর্ডের মতোই `lib/customer-data.ts` থেকে
+ * আসে, যাতে স্কোপ (নিজের প্রজেক্ট) ও সার্ভিস বিলের ফিল্টার (`type=INCOME` +
+ * `clientVisible=true`) এক জায়গাতেই ঠিক হয়।
  */
 export default async function CustomerPaymentsPage() {
   const session = await auth();
@@ -28,13 +31,7 @@ export default async function CustomerPaymentsPage() {
   const now = new Date();
   await markOverdueInstallments(now);
 
-  const projects = await loadCustomerProjects(session.user.id);
-  const plans = await Promise.all(
-    projects.map(async (project) => ({
-      project,
-      plan: await loadProjectPlan(project.projectId, now),
-    })),
-  );
+  const views = await loadCustomerPayments(session.user.id, now);
 
   return (
     <div className="space-y-4">
@@ -45,7 +42,7 @@ export default async function CustomerPaymentsPage() {
         </p>
       </div>
 
-      {plans.length === 0 ? (
+      {views.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <CreditCard className="h-8 w-8 text-muted-foreground" />
@@ -56,7 +53,7 @@ export default async function CustomerPaymentsPage() {
           </CardContent>
         </Card>
       ) : (
-        plans.map(({ project, plan }) => (
+        views.map(({ project, plan, payments, preProjectBills }) => (
           <div key={project.projectId} className="space-y-3">
             <PaymentSummary
               summary={plan.summary}
@@ -94,16 +91,34 @@ export default async function CustomerPaymentsPage() {
               </CardHeader>
               <CardContent>
                 <PaymentHistory
-                  payments={paymentHistory(plan.installments)}
+                  payments={payments}
                   emptyMessage="এখনো কোনো পেমেন্ট জমা পড়েনি — প্রথম কিস্তি জমা হলে রসিদ এখানে দেখা যাবে"
                 />
               </CardContent>
             </Card>
+
+            {/* PRD সেকশন ৫.২ — কনস্ট্রাকশন শুরুর আগের সার্ভিস বিল, আলাদা সেকশনে */}
+            {preProjectBills.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                    প্রি-প্রজেক্ট সার্ভিস বিল
+                  </CardTitle>
+                  <CardDescription>
+                    সাইট ভিজিট, সয়েল টেস্ট, ডিজাইন ও অনুমোদনের বিল — কিস্তির বাইরে
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PreProjectBills bills={preProjectBills} />
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         ))
       )}
 
-      {plans.some(({ plan }) => plan.summary.overdueCount > 0) ? (
+      {views.some(({ plan }) => plan.summary.overdueCount > 0) ? (
         <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           বকেয়া কিস্তি নিয়ে কোনো প্রশ্ন থাকলে অ্যাকাউন্টস টিমের সঙ্গে যোগাযোগ করুন — এই পাতা থেকে

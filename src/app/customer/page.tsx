@@ -16,7 +16,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PhaseTimeline } from '@/components/phase-timeline';
 import { PaymentHistory, PaymentScheduleTable, PaymentSummary } from '@/components/payment-schedule';
 import { DocumentGroupList } from '@/components/documents';
-import { LiveCameraCard } from './live-camera-card';
+import { LiveCameraCard } from '@/components/live-camera';
+// সরাসরি ফাইল থেকে — `components/ledger` ব্যারেলে Admin/Accounts এর এন্ট্রি ফর্ম ও
+// EXPENSE-সহ টেবিল আছে, সেগুলো কাস্টমারের বান্ডলে যাওয়ার কোনো কারণ নেই
+import { PreProjectBills } from '@/components/ledger/pre-project-bills';
 import { ProjectSummaryCard } from './project-summary-card';
 
 export const metadata = { title: 'আমার প্রজেক্ট' };
@@ -73,10 +76,13 @@ export default async function CustomerDashboardPage() {
               collectedPercent={plan.summary.collectedPercent}
             />
 
-            {/* PRD সেকশন ৫.৪ — লাইভ CC ক্যামেরা (URL সেট করা থাকলেই) */}
-            {project.cameraStreamUrl ? (
-              <LiveCameraCard url={project.cameraStreamUrl} title={project.title} />
-            ) : null}
+            {/* PRD সেকশন ৫.৪ — লাইভ CC ক্যামেরা। URL না থাকলেও কার্ডটি থাকে,
+                ভেতরে "সংযুক্ত নেই" বার্তা নিয়ে (কম্পোনেন্টের কমেন্টে কারণ) */}
+            <LiveCameraCard
+              id={`camera-${project.projectId}`}
+              url={project.cameraStreamUrl}
+              title={project.title}
+            />
 
             {/* মোবাইলে পাতাটি লম্বা — নিচের সেকশনগুলোতে দ্রুত যাওয়ার লিংক */}
             <nav aria-label="এই প্রজেক্টের সেকশন" className="flex flex-wrap gap-1.5">
@@ -193,7 +199,8 @@ export default async function CustomerDashboardPage() {
             </div>
 
             {/* PRD সেকশন ৫.২ — Won হওয়ার আগের সার্ভিস বিল (সয়েল টেস্ট, ডিজাইন …)।
-                শুধু আপনাকে দেওয়া বিলগুলোই — Orion এর নিজের খরচ এখানে কখনো আসে না। */}
+                শুধু আপনাকে দেওয়া বিলগুলোই — Orion এর নিজের খরচ এখানে কখনো আসে না
+                (কুয়েরিতেই `type=INCOME` ও `clientVisible=true`)। */}
             {preProjectBills.length > 0 ? (
               <Card>
                 <CardHeader className="pb-3">
@@ -202,29 +209,12 @@ export default async function CustomerDashboardPage() {
                     প্রি-প্রজেক্ট সার্ভিস বিল
                   </CardTitle>
                   <CardDescription>
-                    কনস্ট্রাকশন শুরুর আগে নেওয়া সার্ভিসগুলোর বিল ও রসিদ নম্বর
+                    কনস্ট্রাকশন শুরুর আগে নেওয়া সার্ভিসগুলোর বিল — প্রতিটির রসিদ ডাউনলোড
+                    বা PDF করে রাখতে পারবেন
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ul className="divide-y text-sm">
-                    {preProjectBills.map((bill) => (
-                      <li key={bill.id} className="flex items-start justify-between gap-3 py-2">
-                        <div className="min-w-0">
-                          <p className="font-medium">{bill.categoryLabel}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {bill.dateLabel}
-                            {bill.receiptNo ? ` · রসিদ ${bill.receiptNo}` : ''}
-                          </p>
-                          {bill.note ? (
-                            <p className="text-xs text-muted-foreground">{bill.note}</p>
-                          ) : null}
-                        </div>
-                        <span className="shrink-0 font-semibold tabular-nums">
-                          {bill.amountLabel}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <PreProjectBills bills={preProjectBills} />
                 </CardContent>
               </Card>
             ) : null}

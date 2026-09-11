@@ -58,7 +58,7 @@ export function estimateContractValue(
 }
 
 /**
- * লাইভ CC ক্যামেরার URL কাস্টমার পোর্টালে `<iframe>` এ বসানো হয় (PRD সেকশন ৫.৪)।
+ * লাইভ CC ক্যামেরার URL কাস্টমার পোর্টালে বসানো হয় (PRD সেকশন ৫.৪)।
  * শুধু http/https মানা হয় — `javascript:` ধরনের স্কিম বসিয়ে দিলে সেটি
  * কাস্টমারের ব্রাউজারে স্ক্রিপ্ট চালানোর সুযোগ করে দিত।
  */
@@ -69,5 +69,28 @@ export function isEmbeddableStreamUrl(url: string | null | undefined): boolean {
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
+  }
+}
+
+/**
+ * ক্যামেরার লিংকটি কীভাবে দেখানো হবে — PRD সেকশন ৫.৪ ও ৫.৭।
+ *
+ * NVR/DVR ও IP ক্যামেরার সাধারণ আউটপুট **HLS** (`.m3u8`), যা `<iframe>` এ বসে
+ * না — ওটার জন্য `<video>` + hls.js লাগে (`components/live-camera`)। আর
+ * ভেন্ডরের নিজস্ব প্লেয়ার পেজ বা YouTube live embed হলে `<iframe>` ই ঠিক।
+ * তাই লিংকের ধরনটা এখানেই একবার ঠিক হয়, দুই জায়গায় নয়।
+ *
+ * query string বাদ দিয়ে শুধু pathname দেখা হয় — `…/live.m3u8?token=abc` এর মতো
+ * signed URL ও যেন HLS হিসেবেই চেনা যায়।
+ */
+export type CameraStreamKind = 'hls' | 'embed';
+
+export function cameraStreamKind(url: string | null | undefined): CameraStreamKind | null {
+  if (!isEmbeddableStreamUrl(url)) return null;
+  try {
+    const { pathname } = new URL(url as string);
+    return pathname.toLowerCase().endsWith('.m3u8') ? 'hls' : 'embed';
+  } catch {
+    return null;
   }
 }

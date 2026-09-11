@@ -6,7 +6,7 @@ import { loadProjectTimeline } from '@/lib/phase-data';
 import { buildingTypeLabel } from '@/lib/leads';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhaseProgressSummary, PhaseTimeline, PhaseUpdateLog } from '@/components/phase-timeline';
-import { LiveCameraCard } from '../live-camera-card';
+import { LiveCameraCard } from '@/components/live-camera';
 
 export const metadata = { title: 'নির্মাণ অগ্রগতি' };
 
@@ -61,9 +61,8 @@ export default async function CustomerProgressPage() {
               subtitle={project.landLocation ?? undefined}
             />
 
-            {project.cameraStreamUrl ? (
-              <LiveCameraCard url={project.cameraStreamUrl} title={project.title} />
-            ) : null}
+            {/* URL না থাকলেও কার্ডটি থাকে — ভেতরে "সংযুক্ত নেই" বার্তা */}
+            <LiveCameraCard url={project.cameraStreamUrl} title={project.title} />
 
             <Card>
               <CardHeader className="pb-3">

@@ -121,8 +121,9 @@ function buildDocumentGroups(
     badge: 'PDF',
   }));
 
-  // PRD সেকশন ৫.২ — pre-project সার্ভিসের বিলগুলোও কাস্টমারের রসিদ। এগুলোর
-  // আলাদা প্রিন্ট পেজ নেই, তাই লিংক ছাড়া এন্ট্রি হিসেবেই দেখানো হয়।
+  // PRD সেকশন ৫.২ — pre-project সার্ভিসের বিলগুলোও কাস্টমারের রসিদ; কিস্তির
+  // রসিদের মতোই এগুলোর নিজস্ব প্রিন্ট পেজ আছে (`/receipts/bill/[entryId]`)।
+  // রসিদ নম্বর ছাড়া এন্ট্রির প্রিন্টযোগ্য রূপ নেই, তাই সেগুলো বাদ।
   const bills: DocumentItem[] = preProjectBills
     .filter((entry) => entry.receiptNo !== null)
     .map((entry) => ({
@@ -130,6 +131,8 @@ function buildDocumentGroups(
       type: 'Receipt',
       title: `রসিদ ${entry.receiptNo}`,
       meta: `${entry.dateLabel} · ${entry.categoryLabel} · ${entry.amountLabel}`,
+      href: `/receipts/bill/${entry.id}`,
+      badge: 'PDF',
     }));
 
   return groupDocuments([...uploaded, ...receipts, ...bills]);
@@ -188,6 +191,42 @@ export async function loadCustomerPortal(
   });
 
   return Promise.all((customer?.projects ?? []).map((project) => loadProjectDetail(project, now)));
+}
+
+/**
+ * শুধু পেমেন্ট পাতার জন্য — ফেজ টাইমলাইন ও ডকুমেন্ট ছাড়া।
+ *
+ * কিস্তির প্ল্যান, পরিশোধের ইতিহাস ও প্রি-প্রজেক্ট সার্ভিস বিল — PRD সেকশন ৫.৭
+ * এর "payment schedule + payment history + downloadable invoice/receipt …
+ * pre-project বিল ও construction installment দুটোই"।
+ */
+export type CustomerPaymentsView = {
+  project: CustomerProject;
+  plan: ProjectPlan;
+  payments: PaymentHistoryItem[];
+  preProjectBills: LedgerEntryView[];
+};
+
+export async function loadCustomerPayments(
+  userId: string,
+  now: Date,
+): Promise<CustomerPaymentsView[]> {
+  const customer = await prisma.customer.findUnique({
+    where: { userId },
+    select: { projects: { select: projectSelect, orderBy: { createdAt: 'desc' } } },
+  });
+
+  return Promise.all(
+    (customer?.projects ?? []).map(async (row) => {
+      const project = toCustomerProject(row);
+      const [plan, preProjectBills] = await Promise.all([
+        loadProjectPlan(project.projectId, now),
+        loadClientVisibleEntries(row.leadId),
+      ]);
+
+      return { project, plan, payments: paymentHistory(plan.installments), preProjectBills };
+    }),
+  );
 }
 
 /** শুধু ডকুমেন্ট পাতার জন্য — টাইমলাইন লোড না করে হালকা কুয়েরি */
